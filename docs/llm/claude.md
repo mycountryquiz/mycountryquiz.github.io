@@ -118,3 +118,43 @@ FILE: src/data.ts
 
 
 
+ok I have now removed the blazor dump from the project and added a new dump.txt with our latest code. 
+now we can start working on our implementation independent of the blazor code 
+first problem is the code does not build. can you fix it? 
+
+kushal@fedora:~/src/js/HelloTypescript/CountryQuiz$ time yarn run build
+yarn run v1.22.22
+$ tsc && vite build
+src/main.ts:2:10 - error TS1484: 'CountryData' is a type and must be imported using a type-only import when 'verbatimModuleSyntax' is enabled.
+
+2 import { CountryData, QuestionType, GameState, QUESTIONS, COUNTRIES } from './data';
+           ~~~~~~~~~~~
+
+src/main.ts:2:23 - error TS1484: 'QuestionType' is a type and must be imported using a type-only import when 'verbatimModuleSyntax' is enabled.
+
+2 import { CountryData, QuestionType, GameState, QUESTIONS, COUNTRIES } from './data';
+                        ~~~~~~~~~~~~
+
+src/main.ts:2:37 - error TS1484: 'GameState' is a type and must be imported using a type-only import when 'verbatimModuleSyntax' is enabled.
+
+2 import { CountryData, QuestionType, GameState, QUESTIONS, COUNTRIES } from './data';
+                                      ~~~~~~~~~
+
+
+Found 3 errors in the same file, starting at: src/main.ts:2
+
+error Command failed with exit code 2.
+info Visit https://yarnpkg.com/en/docs/cli/run for documentation about this command.
+
+real	0m0.491s
+user	0m0.680s
+sys	0m0.127s
+
+The TypeScript config has `verbatimModuleSyntax` enabled, which requires type-only imports to be explicitly marked. Let me fix the import statement:The fix separates the imports into:
+- `import type { ... }` for types (CountryData, QuestionType, GameState)
+- `import { ... }` for runtime values (QUESTIONS, COUNTRIES)
+
+This satisfies `verbatimModuleSyntax` which ensures the compiled JS doesn't have unnecessary import statements for types that get erased at runtime.
+
+
+

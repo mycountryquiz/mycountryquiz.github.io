@@ -1,5 +1,6 @@
 import './style.css';
-import { CountryData, QuestionType, GameState, QUESTIONS, COUNTRIES } from './data';
+import type { CountryData, QuestionType, GameState } from './data';
+import { QUESTIONS, COUNTRIES } from './data';
 
 // Storage keys
 const STORAGE_KEY = 'countryQuizState';
