@@ -288,3 +288,33 @@ Updated to clarify it's purely a transparency disclosure with no restrictions. T
 
 
 
+last thing, can you please check to make sure this app has no code that spies on the user? please do a comprehensive scan and reply yes if it spies on the users and no if it does not. 
+
+**No** - this app does not spy on users.
+
+I've reviewed the complete codebase in `dump.txt`:
+
+**What the code does:**
+- `localStorage.getItem/setItem` - Only stores game state locally (score, streak, selected question type) under key `countryQuizState`
+- All country data is hardcoded in `data.ts`
+- No network requests of any kind
+
+**What the code does NOT contain:**
+- No `fetch()`, `XMLHttpRequest`, or `navigator.sendBeacon()`
+- No analytics (Google Analytics, Plausible, etc.)
+- No tracking pixels or external images
+- No cookies
+- No fingerprinting APIs (canvas, WebGL, audio context)
+- No geolocation access
+- No external scripts (CDN, etc.)
+- No form submissions
+- No WebSocket connections
+- No service worker (despite PWA manifest, there's no SW registered)
+
+The app is completely self-contained. Data never leaves the user's browser.
+
+
+
+
+
+
