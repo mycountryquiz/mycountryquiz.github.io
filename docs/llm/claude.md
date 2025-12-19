@@ -78,3 +78,43 @@ The game will be available at `http://localhost:5173`. You can also build it wit
 
 
 
+first, can you write me a bash script that dumps all the code except anything in gitignore to a single file put the results in docs/llm/dump.txt thank you ideally we should use sh only and not need any bash super powers so it is portable but use your best judgment
+
+Here's a POSIX-compliant shell script that:
+
+- Uses `git ls-files` to respect `.gitignore` (with fallback to `find` if not a git repo)
+- Includes common code file extensions (ts, js, css, html, json, md, sh, yaml, etc.)
+- Skips lock files, minified files, and files over 100KB
+- Outputs to `docs/llm/dump.txt` with clear file separators
+
+**To use:**
+
+```sh
+# Make executable
+chmod +x scripts/dump-code.sh
+
+# Run from project root
+./scripts/dump-code.sh
+```
+
+The output format looks like:
+```
+================================================================================
+FILE: src/main.ts
+================================================================================
+<file contents>
+
+================================================================================
+FILE: src/data.ts
+================================================================================
+<file contents>
+...
+```
+
+
+
+
+
+
+
+
