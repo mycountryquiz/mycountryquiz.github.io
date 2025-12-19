@@ -68,7 +68,11 @@ function getRandomPair(question: QuestionType): [CountryData, CountryData] | nul
   for (let i = 0; i < 100; i++) {
     const c1 = valid[Math.floor(Math.random() * valid.length)];
     const c2 = valid[Math.floor(Math.random() * valid.length)];
-    if (c1.name !== c2.name && question.getValue(c1) !== question.getValue(c2)) {
+    const v1 = question.getValue(c1);
+    const v2 = question.getValue(c2);
+    
+    // Ensure different countries AND different values (no ties)
+    if (c1.name !== c2.name && v1 !== null && v2 !== null && v1 !== v2) {
       return [c1, c2];
     }
   }
@@ -93,9 +97,16 @@ function updateScoreDisplay(): void {
   bestStreakDisplay.textContent = state.bestStreak > 0 ? `⭐ Best: ${state.bestStreak}` : '';
 }
 
-function renderCard(card: HTMLElement, country: CountryData, showValue: boolean, isCorrect: boolean | null, q: QuestionType): void {
+function renderCard(
+  card: HTMLElement, 
+  country: CountryData, 
+  showValue: boolean, 
+  wasSelected: boolean,
+  isCorrect: boolean | null, 
+  q: QuestionType
+): void {
   let cardClass = 'country-card';
-  if (showValue) {
+  if (showValue && wasSelected) {
     cardClass += isCorrect ? ' correct' : ' wrong';
   }
   
@@ -123,8 +134,8 @@ function nextRound(): void {
   state.hasAnswered = false;
   
   questionText.textContent = question.template;
-  renderCard(country1Card, state.country1, false, null, question);
-  renderCard(country2Card, state.country2, false, null, question);
+  renderCard(country1Card, state.country1, false, false, null, question);
+  renderCard(country2Card, state.country2, false, false, null, question);
   
   resultMessage.className = 'result-message hidden';
   nextBtn.classList.add('hidden');
@@ -140,6 +151,7 @@ function selectCountry(selected: CountryData): void {
   state.totalQuestions++;
   
   const isCorrect = selected.name === state.correctCountry.name;
+  const selectedCountry1 = selected.name === state.country1.name;
   
   if (isCorrect) {
     state.correctAnswers++;
@@ -155,8 +167,8 @@ function selectCountry(selected: CountryData): void {
     resultMessage.className = 'result-message wrong';
   }
   
-  renderCard(country1Card, state.country1, true, state.country1.name === state.correctCountry.name, state.currentQuestion);
-  renderCard(country2Card, state.country2, true, state.country2.name === state.correctCountry.name, state.currentQuestion);
+  renderCard(country1Card, state.country1, true, selectedCountry1, selectedCountry1 ? isCorrect : null, state.currentQuestion);
+  renderCard(country2Card, state.country2, true, !selectedCountry1, !selectedCountry1 ? isCorrect : null, state.currentQuestion);
   
   country1Card.onclick = null;
   country2Card.onclick = null;

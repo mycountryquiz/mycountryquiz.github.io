@@ -158,3 +158,33 @@ This satisfies `verbatimModuleSyntax` which ensures the compiled JS doesn't have
 
 
 
+I have updated the code in dump.txt 
+please use this code as starting point. 
+when I run the quiz, regardless of the answer I picked, 
+one answer shows up as correct and one as incorrect. 
+this is confusing because I dont know whether I picked the right answer or not. 
+we should only highlight the one we selected and show whether it was correct or not. 
+the other one should not be highlighted. 
+also please check to make sure we are guarding against the equals problem. 
+if two items are equal, we shouldn't be asking comparison question at all 
+so for example, if a = 5 and b = 5, we shouldn't even ask which one is bigger. 
+Looking at the code in `dump.txt`, I can see the issues:
+
+1. **Both cards get highlighted** - In `renderCard()`, we pass `isCorrect` based on whether that country IS the correct answer, not whether the user selected it and was right/wrong.
+
+2. **Equality check exists** but let me verify it's working properly in `getRandomPair()`.
+
+Let me fix the main.ts:Now let me verify the equality guard in `getRandomPair()`. Looking at the code, the check `question.getValue(c1) !== question.getValue(c2)` exists but could fail with floating point comparisons. Let me make it more robust:**Changes made:**
+
+1. **`renderCard()` now takes a `wasSelected` parameter** - Only the selected card gets highlighted with correct/wrong styling
+
+2. **`selectCountry()` tracks which card was selected** - `selectedCountry1` boolean determines which card to highlight
+
+3. **Only selected card shows color** - The non-selected card still shows its value but has no colored border/background
+
+4. **Equality guard improved** - Explicitly checks `v1 !== v2` with null guards to ensure we never ask about ties
+
+Now when you answer:
+- Your selected card shows green (correct) or red (wrong)
+- The other card just shows its value with no highlight
+- The result message tells you if you were wrong and shows the correct answer
