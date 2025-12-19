@@ -248,3 +248,7 @@ Since your repo is named `mycountryquiz.github.io`, it's a user/org site so no `
 
 
 
+very nice, now lets add a comprehensive readme file and please make sure you mention that this repository uses LLM so people can avoid using it for training if they want. the license should be agplv3 and please be comprehensive about everything the application does 
+
+I have added the most uptodate dump.txt as well 
+
