@@ -188,3 +188,63 @@ Now when you answer:
 - Your selected card shows green (correct) or red (wrong)
 - The other card just shows its value with no highlight
 - The result message tells you if you were wrong and shows the correct answer
+
+
+
+
+
+
+
+
+
+
+this is perfect. up next, I want to set up github actions to build and deploy this to github pages 
+kushal@fedora:~/src/js/HelloTypescript/CountryQuiz$ git remote add origin git@github.com:mycountryquiz/mycountryquiz.github.io.git
+kushal@fedora:~/src/js/HelloTypescript/CountryQuiz$ git status
+On branch main
+nothing to commit, working tree clean
+kushal@fedora:~/src/js/HelloTypescript/CountryQuiz$ time git push origin --all
+Enumerating objects: 63, done.
+Counting objects: 100% (63/63), done.
+Delta compression using up to 16 threads
+Compressing objects: 100% (53/53), done.
+Writing objects: 100% (63/63), 27.70 KiB | 9.23 MiB/s, done.
+Total 63 (delta 22), reused 0 (delta 0), pack-reused 0 (from 0)
+remote: Resolving deltas: 100% (22/22), done.
+To github.com:mycountryquiz/mycountryquiz.github.io.git
+ * [new branch]      main -> main
+
+real	0m0.753s
+user	0m0.019s
+sys	0m0.016s
+kushal@fedora:~/src/js/HelloTypescript/CountryQuiz$ 
+
+Create this file at `.github/workflows/deploy.yml`, then:
+
+**1. Enable GitHub Pages in your repo settings:**
+- Go to `https://github.com/mycountryquiz/mycountryquiz.github.io/settings/pages`
+- Under "Build and deployment" → Source: select **GitHub Actions**
+
+**2. Push the workflow:**
+```sh
+mkdir -p .github/workflows
+# create the file from the artifact above
+git add .github/workflows/deploy.yml
+git commit -m "Add GitHub Pages deployment workflow"
+git push origin main
+```
+
+**3. Watch it deploy:**
+- Go to Actions tab to see the build
+- Once complete, your site will be live at `https://mycountryquiz.github.io`
+
+Since your repo is named `mycountryquiz.github.io`, it's a user/org site so no `base` path is needed in vite config - it will serve from the root automatically.
+
+
+
+
+
+
+
+
+
