@@ -423,3 +423,4 @@ Delivery
 also when pressing buttons we need some kind of audible and tactile feedback 
 repo is public at github.com/mycountryquiz/mycountryquiz.github.io 
 website is at https://mycountryquiz.github.io/ 
+prefer typescript 7 and 7.1 where possible 
