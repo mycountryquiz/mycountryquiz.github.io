@@ -20,6 +20,79 @@ updates:
 
 
 ================================================================================
+FILE: .github/workflows/deploy.yml
+================================================================================
+name: Build and deploy
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+  workflow_call:
+    inputs:
+      ref:
+        description: Commit to build and deploy
+        type: string
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.ref || github.sha }}
+          persist-credentials: false
+
+      - name: Setup Node
+        uses: actions/setup-node@v7
+        with:
+          node-version: lts/*
+          cache: yarn
+
+      - name: Install dependencies
+        run: yarn install --frozen-lockfile
+
+      - name: Test
+        run: yarn test
+
+      - name: Build
+        run: yarn build
+
+      - name: Upload artifact
+        if: github.event_name != 'pull_request'
+        uses: actions/upload-pages-artifact@v5
+        with:
+          path: dist
+
+  deploy:
+    if: github.event_name != 'pull_request'
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    concurrency:
+      group: pages
+      cancel-in-progress: false
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Configure Pages
+        uses: actions/configure-pages@v6
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v5
+
+
+================================================================================
 FILE: .github/workflows/update-data.yml
 ================================================================================
 name: Update country data
@@ -93,6 +166,266 @@ jobs:
 
 
 ================================================================================
+FILE: README.md
+================================================================================
+# 🌍 Country Quiz
+
+A client-side country comparison quiz game. Test your knowledge of world geography, economics, and demographics by comparing countries across various metrics.
+
+**Play now: [mycountryquiz.github.io](https://mycountryquiz.github.io)**
+
+## Features
+
+- **13 Quiz Categories**
+  - Population
+  - Area (km²)
+  - GDP (nominal, current US$)
+  - GDP per Capita
+  - GNI per Capita (PPP)
+  - Population Density
+  - Adult Literacy Rate
+  - Human Development Index (HDI)
+  - Life Expectancy
+  - Fertility Rate
+  - Urbanization (share of urban population)
+  - Internet Use (share of population)
+  - Forest Cover (share of land area)
+
+- **Every country with World Bank coverage** (~200 economies), each value shown with the year it was measured
+- **Automatically refreshed data** via a weekly GitHub Actions workflow
+- **No ties** — pairs with equal (or identically displayed) values are never asked
+- **Score Tracking**
+  - Current score (correct/total), current streak, best streak
+  - All stats persist in localStorage
+- **Audible and tactile feedback**
+  - Short synthesized tones (Web Audio API) and vibration (Vibration API) on taps, correct and wrong answers
+  - Toggle with the 🔊/🔇 button; the choice is remembered
+  - Vibration is unavailable on iOS Safari; sound still works
+- **Progressive Web App (PWA)**
+  - Installable ("Add to Home Screen")
+  - Works offline after first load (network-first service worker, same-origin only)
+- **Accessible** — real buttons, keyboard navigation, visible focus, reduced-motion support
+- **Fully Client-Side**
+  - No server, no data collection, no third-party requests at runtime
+  - Statistics are bundled into the app at build time
+
+## Tech Stack
+
+- **TypeScript 7** (native compiler)
+- **Vite 8** (Rolldown-based bundler)
+- **Vanilla TypeScript** - No framework dependencies
+- **Node.js test runner** - Unit tests with no extra dependencies
+- **GitHub Actions + GitHub Pages** - CI, scheduled data refresh, deployment
+- **Dependabot** - Weekly npm and GitHub Actions updates
+
+## Development
+
+### Prerequisites
+
+- Node.js 22.18+ (current LTS recommended; scripts run TypeScript directly via Node type stripping)
+- Yarn 1.x
+
+### Setup
+
+```sh
+git clone https://github.com/mycountryquiz/mycountryquiz.github.io.git
+cd mycountryquiz.github.io
+yarn install
+yarn dev
+```
+
+### Scripts
+
+| Command | Description |
+|---------|-------------|
+| `yarn dev` | Start dev server at localhost:5173 |
+| `yarn typecheck` | Type-check app, scripts and tests |
+| `yarn test` | Run unit tests |
+| `yarn build` | Type-check and build for production |
+| `yarn preview` | Preview production build locally |
+| `yarn update-data` | Fetch the latest statistics into `src/data/countries.json` |
+| `./scripts/dump-code.sh` | Export codebase to docs/llm/dump.txt |
+
+### Project Structure
+
+```
+├── src/
+│   ├── main.ts             # UI (QuizApp)
+│   ├── quiz.ts             # Pure game logic (round creation, tie guard)
+│   ├── metrics.ts          # Category definitions, sources and formatting
+│   ├── data.ts             # Loads bundled dataset, derives flags
+│   ├── storage.ts          # localStorage persistence
+│   ├── feedback.ts         # Sound and vibration
+│   ├── types.ts            # Shared types
+│   ├── style.css           # Responsive styling
+│   └── data/
+│       └── countries.json  # Generated dataset
+├── scripts/
+│   ├── update-data.ts      # Data refresh entry point
+│   ├── lib/                # HTTP, World Bank, OWID, dataset builder
+│   └── dump-code.sh        # Export code for LLM context
+├── tests/                  # node:test suites
+├── public/
+│   ├── manifest.json       # PWA manifest
+│   └── sw.js               # Offline service worker
+├── .github/
+│   ├── workflows/
+│   │   ├── deploy.yml      # Test, build, deploy (also reusable)
+│   │   └── update-data.yml # Weekly data refresh
+│   └── dependabot.yml
+├── index.html
+├── tsconfig.json           # App (browser)
+└── tsconfig.node.json      # Scripts and tests (Node)
+```
+
+## Data
+
+### Sources
+
+| Category | Source | Indicator |
+|----------|--------|-----------|
+| Population | World Bank WDI | `SP.POP.TOTL` |
+| Area | World Bank WDI | `AG.SRF.TOTL.K2` |
+| GDP | World Bank WDI | `NY.GDP.MKTP.CD` |
+| GDP per Capita | World Bank WDI | `NY.GDP.PCAP.CD` |
+| GNI per Capita (PPP) | World Bank WDI | `NY.GNP.PCAP.PP.CD` |
+| Population Density | World Bank WDI | `EN.POP.DNST` |
+| Adult Literacy Rate | World Bank WDI (UNESCO UIS) | `SE.ADT.LITR.ZS` |
+| HDI | UNDP Human Development Report via Our World in Data | `human-development-index` |
+| Life Expectancy | World Bank WDI | `SP.DYN.LE00.IN` |
+| Fertility Rate | World Bank WDI | `SP.DYN.TFRT.IN` |
+| Urbanization | World Bank WDI | `SP.URB.TOTL.IN.ZS` |
+| Internet Use | World Bank WDI (ITU) | `IT.NET.USER.ZS` |
+| Forest Cover | World Bank WDI (FAO) | `AG.LND.FRST.ZS` |
+
+- [World Bank Open Data](https://data.worldbank.org/) (CC BY 4.0)
+- [UNDP Human Development Reports](https://hdr.undp.org/) via [Our World in Data](https://ourworldindata.org/grapher/human-development-index) (CC BY 4.0)
+
+For every country and category the most recent non-empty value from the last 20 years is used, and the year is shown next to the value. Country names come from the Unicode CLDR (via `Intl.DisplayNames`) with a few short-form overrides; flags are derived from ISO 3166-1 codes. Regional aggregates and entries without population and area are excluded.
+
+### Automatic updates
+
+`.github/workflows/update-data.yml` runs every Monday (and on demand from the Actions tab):
+
+1. Runs `yarn update-data`, which fetches every metric, keeps the latest value per country, rounds to each metric's precision and writes a deterministically sorted `src/data/countries.json`.
+2. Rejects the result if coverage looks wrong (fewer than 180 countries, any category under 60 countries, duplicate codes) so a broken upstream response never reaches the site.
+3. Runs tests and a full build.
+4. Commits only when the data actually changed, then calls `deploy.yml` to publish that exact commit.
+
+The workflow pushes to `main` with `GITHUB_TOKEN`; if branch protection blocks this, allow GitHub Actions to bypass it or switch the commit step to open a pull request.
+
+To add a category, add an entry to `METRICS` in `src/metrics.ts` with a World Bank indicator or OWID chart slug, then run `yarn update-data`.
+
+## Privacy
+
+- No analytics, cookies, fingerprinting, or external requests at runtime
+- localStorage holds only score, streaks, selected category and the feedback toggle
+- The Web Audio API is used only to play tones; nothing is read back
+- The service worker caches same-origin files on your device and never contacts other hosts
+
+## AI Disclosure
+
+This project was developed with assistance from Claude (Anthropic). The codebase in `docs/llm/dump.txt` is exported for LLM context during development.
+
+This disclosure is for transparency only. There are no restrictions on using this code for AI training—knowledge should be shared freely. If you prefer human-only code for your training datasets, this notice allows you to make that choice.
+
+## License
+
+This project is licensed under the **GNU Affero General Public License v3.0 (AGPL-3.0)**.
+
+This means:
+- You can use, modify, and distribute this code
+- If you modify and deploy it as a network service, you must release your source code
+- Derivative works must also be licensed under AGPL-3.0
+- See [LICENSE](LICENSE) file for full terms
+
+## Contributing
+
+Contributions welcome! Please:
+1. Fork the repository
+2. Create a feature branch
+3. Make your changes
+4. Run `yarn test && yarn build` to ensure it passes and compiles
+5. Submit a pull request
+
+## Acknowledgments
+
+- Flag emojis from Unicode standard
+- Inspired by geography quiz games and the desire to learn more about our world
+
+
+================================================================================
+FILE: index.html
+================================================================================
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, user-scalable=no" />
+    <meta name="theme-color" content="#0f172a" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <title>Country Quiz</title>
+    <link rel="manifest" href="/manifest.json" />
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🌍</text></svg>" />
+  </head>
+  <body>
+    <div id="app"></div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
+
+
+================================================================================
+FILE: package.json
+================================================================================
+{
+  "name": "countryquiz",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "license": "AGPL-3.0-only",
+  "engines": {
+    "node": ">=22.18.0"
+  },
+  "scripts": {
+    "dev": "vite",
+    "typecheck": "tsc -p tsconfig.json && tsc -p tsconfig.node.json",
+    "test": "node --test \"tests/**/*.test.ts\"",
+    "build": "tsc -p tsconfig.json && tsc -p tsconfig.node.json && vite build",
+    "preview": "vite preview",
+    "update-data": "node scripts/update-data.ts"
+  },
+  "devDependencies": {
+    "@types/node": "^24.19.4",
+    "typescript": "^7.0.2",
+    "vite": "^8.4.0"
+  }
+}
+
+
+================================================================================
+FILE: public/manifest.json
+================================================================================
+{
+  "name": "Country Quiz",
+  "short_name": "CountryQuiz",
+  "description": "Test your knowledge of world countries",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0f172a",
+  "theme_color": "#0f172a",
+  "icons": [
+    {
+      "src": "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🌍</text></svg>",
+      "sizes": "any",
+      "type": "image/svg+xml"
+    }
+  ]
+}
+
+
+================================================================================
 FILE: public/sw.js
 ================================================================================
 const CACHE = 'country-quiz-v1';
@@ -122,6 +455,112 @@ self.addEventListener('fetch', event => {
       .catch(() => caches.match(request).then(cached => cached ?? caches.match('/')).then(cached => cached ?? Response.error()))
   );
 });
+
+
+================================================================================
+FILE: public/vite.svg
+================================================================================
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" aria-hidden="true" role="img" class="iconify iconify--logos" width="31.88" height="32" preserveAspectRatio="xMidYMid meet" viewBox="0 0 256 257"><defs><linearGradient id="IconifyId1813088fe1fbc01fb466" x1="-.828%" x2="57.636%" y1="7.652%" y2="78.411%"><stop offset="0%" stop-color="#41D1FF"></stop><stop offset="100%" stop-color="#BD34FE"></stop></linearGradient><linearGradient id="IconifyId1813088fe1fbc01fb467" x1="43.376%" x2="50.316%" y1="2.242%" y2="89.03%"><stop offset="0%" stop-color="#FFEA83"></stop><stop offset="8.333%" stop-color="#FFDD35"></stop><stop offset="100%" stop-color="#FFA800"></stop></linearGradient></defs><path fill="url(#IconifyId1813088fe1fbc01fb466)" d="M255.153 37.938L134.897 252.976c-2.483 4.44-8.862 4.466-11.382.048L.875 37.958c-2.746-4.814 1.371-10.646 6.827-9.67l120.385 21.517a6.537 6.537 0 0 0 2.322-.004l117.867-21.483c5.438-.991 9.574 4.796 6.877 9.62Z"></path><path fill="url(#IconifyId1813088fe1fbc01fb467)" d="M185.432.063L96.44 17.501a3.268 3.268 0 0 0-2.634 3.014l-5.474 92.456a3.268 3.268 0 0 0 3.997 3.378l24.777-5.718c2.318-.535 4.413 1.507 3.936 3.838l-7.361 36.047c-.495 2.426 1.782 4.5 4.151 3.78l15.304-4.649c2.372-.72 4.652 1.36 4.15 3.788l-11.698 56.621c-.732 3.542 3.979 5.473 5.943 2.437l1.313-2.028l72.516-144.72c1.215-2.423-.88-5.186-3.54-4.672l-25.505 4.922c-2.396.462-4.435-1.77-3.759-4.114l16.646-57.705c.677-2.35-1.37-4.583-3.769-4.113Z"></path></svg>
+
+================================================================================
+FILE: scripts/dump-code.sh
+================================================================================
+#!/bin/sh
+# Dumps all project code to a single file for LLM context
+# Respects .gitignore patterns
+# Output: docs/llm/dump.txt
+
+set -e
+
+OUTPUT_DIR="docs/llm"
+OUTPUT_FILE="$OUTPUT_DIR/dump.txt"
+
+# Create output directory
+mkdir -p "$OUTPUT_DIR"
+
+# Clear/create output file
+> "$OUTPUT_FILE"
+
+echo "Dumping project code to $OUTPUT_FILE..."
+
+# Use git ls-files to get tracked files (respects .gitignore)
+# Falls back to find if not a git repo
+if git rev-parse --git-dir > /dev/null 2>&1; then
+    FILES=$(git ls-files --cached --others --exclude-standard 2>/dev/null)
+else
+    echo "Warning: Not a git repository, using find (may include ignored files)"
+    FILES=$(find . -type f \
+        ! -path './node_modules/*' \
+        ! -path './dist/*' \
+        ! -path './.git/*' \
+        ! -path './docs/llm/*' \
+        ! -name '*.lock' \
+        ! -name 'package-lock.json' \
+        | sed 's|^\./||')
+fi
+
+# File extensions to include
+is_code_file() {
+    case "$1" in
+        *.ts|*.tsx|*.js|*.jsx|*.mjs|*.cjs) return 0 ;;
+        *.css|*.scss|*.less) return 0 ;;
+        *.html|*.htm) return 0 ;;
+        *.json) return 0 ;;
+        *.md|*.txt) return 0 ;;
+        *.sh) return 0 ;;
+        *.yaml|*.yml) return 0 ;;
+        *.toml) return 0 ;;
+        *.svg) return 0 ;;
+        *) return 1 ;;
+    esac
+}
+
+# Skip certain files
+should_skip() {
+    case "$1" in
+        package-lock.json|pnpm-lock.yaml|yarn.lock) return 0 ;;
+        *.min.js|*.min.css) return 0 ;;
+        docs/llm/*) return 0 ;;
+        *) return 1 ;;
+    esac
+}
+
+count=0
+
+echo "$FILES" | while IFS= read -r file; do
+    # Skip empty lines
+    [ -z "$file" ] && continue
+    
+    # Skip if not a regular file
+    [ ! -f "$file" ] && continue
+    
+    # Skip non-code files
+    is_code_file "$file" || continue
+    
+    # Skip certain files
+    should_skip "$file" && continue
+    
+    # Get file size
+    size=$(wc -c < "$file" | tr -d ' ')
+    
+    # Skip files larger than 100KB
+    [ "$size" -gt 102400 ] && continue
+    
+    echo "================================================================================" >> "$OUTPUT_FILE"
+    echo "FILE: $file" >> "$OUTPUT_FILE"
+    echo "================================================================================" >> "$OUTPUT_FILE"
+    cat "$file" >> "$OUTPUT_FILE"
+    echo "" >> "$OUTPUT_FILE"
+    echo "" >> "$OUTPUT_FILE"
+    
+    count=$((count + 1))
+done
+
+# Count files (recount since subshell)
+file_count=$(grep -c "^FILE:" "$OUTPUT_FILE" 2>/dev/null || echo "0")
+total_size=$(wc -c < "$OUTPUT_FILE" | tr -d ' ')
+
+echo "Done! Dumped $file_count files ($total_size bytes) to $OUTPUT_FILE"
 
 
 ================================================================================
@@ -456,6 +895,22 @@ main().catch(error => {
   console.error(error instanceof Error ? error.message : error);
   process.exitCode = 1;
 });
+
+
+================================================================================
+FILE: src/data.ts
+================================================================================
+import raw from './data/countries.json' with { type: 'json' };
+import type { Country, Dataset } from './types.ts';
+
+const REGIONAL_INDICATOR_OFFSET = 0x1f1e6 - 'A'.charCodeAt(0);
+
+export const toFlag = (iso2: string): string =>
+  String.fromCodePoint(...[...iso2.toUpperCase()].map(c => c.charCodeAt(0) + REGIONAL_INDICATOR_OFFSET));
+
+const dataset = raw as Dataset;
+
+export const COUNTRIES: readonly Country[] = dataset.countries.map(c => ({ ...c, flag: toFlag(c.iso2) }));
 
 
 ================================================================================
@@ -3394,920 +3849,6 @@ export class Feedback {
 
 
 ================================================================================
-FILE: src/metrics.ts
-================================================================================
-import type { Metric, MetricId } from './types.ts';
-
-const number = (digits: number) =>
-  new Intl.NumberFormat(undefined, { minimumFractionDigits: digits, maximumFractionDigits: digits });
-const usd = (options: Intl.NumberFormatOptions) =>
-  new Intl.NumberFormat(undefined, { style: 'currency', currency: 'USD', ...options });
-
-const integer = number(0);
-const oneDecimal = number(1);
-const twoDecimals = number(2);
-const threeDecimals = number(3);
-const usdCompact = usd({ notation: 'compact', maximumFractionDigits: 2 });
-const usdWhole = usd({ maximumFractionDigits: 0 });
-
-const worldBank = (indicator: string) => ({ kind: 'worldBank', indicator }) as const;
-const percent = (v: number) => `${oneDecimal.format(v)}%`;
-
-export const METRICS: readonly Metric[] = [
-  {
-    id: 'population', label: 'Population', question: 'Which country has a larger population?',
-    precision: 0, source: worldBank('SP.POP.TOTL'), format: v => integer.format(v)
-  },
-  {
-    id: 'area', label: 'Area', question: 'Which country is larger by area?',
-    precision: 0, source: worldBank('AG.SRF.TOTL.K2'), format: v => `${integer.format(v)} km²`
-  },
-  {
-    id: 'gdp', label: 'GDP', question: 'Which country has a higher GDP?',
-    precision: 0, source: worldBank('NY.GDP.MKTP.CD'), format: v => usdCompact.format(v)
-  },
-  {
-    id: 'gdp_per_capita', label: 'GDP per Capita', question: 'Which country has a higher GDP per capita?',
-    precision: 0, source: worldBank('NY.GDP.PCAP.CD'), format: v => usdWhole.format(v)
-  },
-  {
-    id: 'gni_per_capita_ppp', label: 'GNI per Capita (PPP)', question: 'Which country has a higher GNI per capita (PPP)?',
-    precision: 0, source: worldBank('NY.GNP.PCAP.PP.CD'), format: v => `${usdWhole.format(v)} PPP`
-  },
-  {
-    id: 'density', label: 'Pop. Density', question: 'Which country has a higher population density?',
-    precision: 1, source: worldBank('EN.POP.DNST'), format: v => `${oneDecimal.format(v)}/km²`
-  },
-  {
-    id: 'literacy', label: 'Literacy Rate', question: 'Which country has a higher adult literacy rate?',
-    precision: 1, source: worldBank('SE.ADT.LITR.ZS'), format: percent
-  },
-  {
-    id: 'hdi', label: 'HDI', question: 'Which country has a higher Human Development Index?',
-    precision: 3, source: { kind: 'owid', chart: 'human-development-index' }, format: v => threeDecimals.format(v)
-  },
-  {
-    id: 'life_expectancy', label: 'Life Expectancy', question: 'Which country has a higher life expectancy?',
-    precision: 1, source: worldBank('SP.DYN.LE00.IN'), format: v => `${oneDecimal.format(v)} years`
-  },
-  {
-    id: 'fertility', label: 'Fertility Rate', question: 'Which country has a higher fertility rate?',
-    precision: 2, source: worldBank('SP.DYN.TFRT.IN'), format: v => `${twoDecimals.format(v)} births/woman`
-  },
-  {
-    id: 'urban_population', label: 'Urbanization', question: 'Which country has a higher share of people living in cities?',
-    precision: 1, source: worldBank('SP.URB.TOTL.IN.ZS'), format: percent
-  },
-  {
-    id: 'internet_users', label: 'Internet Use', question: 'Which country has a higher share of internet users?',
-    precision: 1, source: worldBank('IT.NET.USER.ZS'), format: percent
-  },
-  {
-    id: 'forest_area', label: 'Forest Cover', question: 'Which country has a higher share of land covered by forest?',
-    precision: 1, source: worldBank('AG.LND.FRST.ZS'), format: percent
-  }
-];
-
-export const DEFAULT_METRIC_ID: MetricId = 'population';
-
-export const findMetric = (id: string): Metric | undefined => METRICS.find(m => m.id === id);
-
-
-================================================================================
-FILE: src/quiz.ts
-================================================================================
-import type { Country, Metric } from './types.ts';
-
-export interface Round {
-  readonly metric: Metric;
-  readonly first: Country;
-  readonly second: Country;
-  readonly answer: Country;
-}
-
-export type Random = () => number;
-
-const MAX_ATTEMPTS = 200;
-
-export const valueOf = (metric: Metric, country: Country): number | undefined => country.metrics[metric.id]?.value;
-
-export const isDistinguishable = (metric: Metric, a: Country, b: Country): boolean => {
-  const va = valueOf(metric, a);
-  const vb = valueOf(metric, b);
-  return va !== undefined && vb !== undefined && va !== vb && metric.format(va) !== metric.format(vb);
-};
-
-const candidatesFor = (metric: Metric, countries: readonly Country[]): Country[] =>
-  countries.filter(c => valueOf(metric, c) !== undefined);
-
-export const isPlayable = (metric: Metric, countries: readonly Country[]): boolean =>
-  new Set(candidatesFor(metric, countries).map(c => metric.format(valueOf(metric, c)!))).size >= 2;
-
-export const createRound = (metric: Metric, countries: readonly Country[], random: Random = Math.random): Round | null => {
-  const pool = candidatesFor(metric, countries);
-  if (pool.length < 2) return null;
-
-  const pick = () => pool[Math.floor(random() * pool.length)]!;
-  for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
-    const first = pick();
-    const second = pick();
-    if (first.iso2 !== second.iso2 && isDistinguishable(metric, first, second)) {
-      const answer = valueOf(metric, first)! > valueOf(metric, second)! ? first : second;
-      return { metric, first, second, answer };
-    }
-  }
-  return null;
-};
-
-
-================================================================================
-FILE: src/storage.ts
-================================================================================
-import { DEFAULT_METRIC_ID } from './metrics.ts';
-
-export interface Stats {
-  correctAnswers: number;
-  totalQuestions: number;
-  currentStreak: number;
-  bestStreak: number;
-}
-
-export interface Settings {
-  selectedQuestionId: string;
-  feedbackEnabled: boolean;
-}
-
-export type PersistedState = Stats & Settings;
-
-const STORAGE_KEY = 'countryQuizState';
-
-export const EMPTY_STATS: Readonly<Stats> = { correctAnswers: 0, totalQuestions: 0, currentStreak: 0, bestStreak: 0 };
-
-const DEFAULTS: Readonly<PersistedState> = { ...EMPTY_STATS, selectedQuestionId: DEFAULT_METRIC_ID, feedbackEnabled: true };
-
-const count = (value: unknown, fallback: number): number =>
-  typeof value === 'number' && Number.isInteger(value) && value >= 0 ? value : fallback;
-
-export const loadState = (): PersistedState => {
-  try {
-    const parsed: Record<string, unknown> = JSON.parse(localStorage.getItem(STORAGE_KEY) ?? '{}');
-    return {
-      correctAnswers: count(parsed['correctAnswers'], DEFAULTS.correctAnswers),
-      totalQuestions: count(parsed['totalQuestions'], DEFAULTS.totalQuestions),
-      currentStreak: count(parsed['currentStreak'], DEFAULTS.currentStreak),
-      bestStreak: count(parsed['bestStreak'], DEFAULTS.bestStreak),
-      selectedQuestionId: typeof parsed['selectedQuestionId'] === 'string' ? parsed['selectedQuestionId'] : DEFAULTS.selectedQuestionId,
-      feedbackEnabled: typeof parsed['feedbackEnabled'] === 'boolean' ? parsed['feedbackEnabled'] : DEFAULTS.feedbackEnabled
-    };
-  } catch {
-    return { ...DEFAULTS };
-  }
-};
-
-export const saveState = (state: PersistedState): void => {
-  try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
-  } catch (e) {
-    console.warn('Failed to save state:', e);
-  }
-};
-
-
-================================================================================
-FILE: src/types.ts
-================================================================================
-export type MetricId =
-  | 'population'
-  | 'area'
-  | 'gdp'
-  | 'gdp_per_capita'
-  | 'gni_per_capita_ppp'
-  | 'density'
-  | 'literacy'
-  | 'hdi'
-  | 'life_expectancy'
-  | 'fertility'
-  | 'urban_population'
-  | 'internet_users'
-  | 'forest_area';
-
-export type MetricSource =
-  | { readonly kind: 'worldBank'; readonly indicator: string }
-  | { readonly kind: 'owid'; readonly chart: string };
-
-export interface Metric {
-  readonly id: MetricId;
-  readonly label: string;
-  readonly question: string;
-  readonly precision: number;
-  readonly source: MetricSource;
-  readonly format: (value: number) => string;
-}
-
-export interface Observation {
-  value: number;
-  year?: number;
-}
-
-export interface CountryRecord {
-  iso2: string;
-  iso3?: string;
-  name: string;
-  region: string;
-  metrics: Partial<Record<MetricId, Observation>>;
-}
-
-export interface Dataset {
-  countries: CountryRecord[];
-}
-
-export interface Country extends CountryRecord {
-  flag: string;
-}
-
-
-================================================================================
-FILE: tests/data.test.ts
-================================================================================
-import assert from 'node:assert/strict';
-import { describe, it } from 'node:test';
-import { COUNTRIES, toFlag } from '../src/data.ts';
-import { METRICS } from '../src/metrics.ts';
-import { isPlayable } from '../src/quiz.ts';
-
-describe('bundled dataset', () => {
-  it('has unique ISO codes', () => assert.equal(new Set(COUNTRIES.map(c => c.iso2)).size, COUNTRIES.length));
-
-  it('has valid ISO 3166-1 alpha-2 codes and names', () => {
-    for (const c of COUNTRIES) {
-      assert.match(c.iso2, /^[A-Z]{2}$/);
-      assert.ok(c.name.trim().length > 0);
-    }
-  });
-
-  it('only contains finite metric values for known metrics', () => {
-    const known = new Set<string>(METRICS.map(m => m.id));
-    for (const c of COUNTRIES) {
-      for (const [id, observation] of Object.entries(c.metrics)) {
-        assert.ok(known.has(id), `${c.iso2} has unknown metric ${id}`);
-        assert.ok(Number.isFinite(observation.value), `${c.iso2}.${id} is not finite`);
-      }
-    }
-  });
-
-  it('keeps the core categories playable', () => {
-    for (const id of ['population', 'area', 'gdp', 'life_expectancy']) {
-      assert.ok(isPlayable(METRICS.find(m => m.id === id)!, COUNTRIES), id);
-    }
-  });
-});
-
-describe('toFlag', () => {
-  it('builds regional indicator flags', () => assert.equal(toFlag('ca'), '🇨🇦'));
-});
-
-
-================================================================================
-FILE: tests/quiz.test.ts
-================================================================================
-import assert from 'node:assert/strict';
-import { describe, it } from 'node:test';
-import { findMetric } from '../src/metrics.ts';
-import { createRound, isDistinguishable, isPlayable } from '../src/quiz.ts';
-import type { Country, Metric } from '../src/types.ts';
-
-const metric = findMetric('literacy')!;
-
-const country = (iso2: string, literacy?: number): Country => ({
-  iso2,
-  name: iso2,
-  region: 'Test',
-  flag: '',
-  metrics: literacy === undefined ? {} : { literacy: { value: literacy } }
-});
-
-const sequence = (...values: number[]) => {
-  let i = 0;
-  return () => values[i++ % values.length]!;
-};
-
-describe('isDistinguishable', () => {
-  it('rejects equal values', () => assert.equal(isDistinguishable(metric, country('AA', 99), country('BB', 99)), false));
-  it('rejects values that format identically', () => assert.equal(isDistinguishable(metric, country('AA', 99.01), country('BB', 99.04)), false));
-  it('rejects missing values', () => assert.equal(isDistinguishable(metric, country('AA'), country('BB', 50)), false));
-  it('accepts distinct values', () => assert.equal(isDistinguishable(metric, country('AA', 98), country('BB', 99)), true));
-});
-
-describe('createRound', () => {
-  it('picks the higher value as the answer', () => {
-    const round = createRound(metric, [country('AA', 40), country('BB', 90)], sequence(0, 0.9));
-    assert.ok(round);
-    assert.equal(round.answer.iso2, 'BB');
-  });
-
-  it('never pairs a country with itself or a tie', () => {
-    const pool = [country('AA', 50), country('BB', 50), country('CC', 70)];
-    for (let i = 0; i < 200; i++) {
-      const round = createRound(metric, pool);
-      assert.ok(round);
-      assert.notEqual(round.first.iso2, round.second.iso2);
-      assert.ok(isDistinguishable(metric, round.first, round.second));
-    }
-  });
-
-  it('returns null when no valid pair exists', () => {
-    assert.equal(createRound(metric, [country('AA', 50), country('BB', 50)]), null);
-    assert.equal(createRound(metric, [country('AA', 50), country('BB')]), null);
-  });
-});
-
-describe('isPlayable', () => {
-  const m: Metric = metric;
-  it('requires at least two distinguishable values', () => {
-    assert.equal(isPlayable(m, [country('AA', 50), country('BB', 50)]), false);
-    assert.equal(isPlayable(m, [country('AA', 50), country('BB', 60)]), true);
-  });
-});
-
-
-================================================================================
-FILE: tests/update-data.test.ts
-================================================================================
-import assert from 'node:assert/strict';
-import { describe, it } from 'node:test';
-import { buildDataset, displayName, validateDataset } from '../scripts/lib/dataset.ts';
-import { latestByCountry } from '../scripts/lib/observations.ts';
-import { parseCsv, toRawObservations as fromOwid } from '../scripts/lib/owid.ts';
-import { isAggregate, toRawObservations as fromWorldBank } from '../scripts/lib/world-bank.ts';
-import { METRICS } from '../src/metrics.ts';
-import type { MetricId } from '../src/types.ts';
-
-describe('parseCsv', () => {
-  it('handles quotes, escaped quotes and CRLF', () => {
-    assert.deepEqual(parseCsv('a,b\r\n"x, y","say ""hi"""\r\n'), [['a', 'b'], ['x, y', 'say "hi"']]);
-  });
-});
-
-describe('OWID rows', () => {
-  it('keeps ISO3 rows with values only', () => {
-    const rows = parseCsv('Entity,Code,Year,Human Development Index\nWorld,OWID_WRL,2023,0.75\nNorway,NOR,2023,0.97\nChad,TCD,2023,\n');
-    assert.deepEqual(fromOwid(rows), [{ iso3: 'NOR', year: 2023, value: 0.97 }]);
-  });
-});
-
-describe('World Bank rows', () => {
-  it('drops null values', () => {
-    assert.deepEqual(
-      fromWorldBank([
-        { countryiso3code: 'CAN', date: '2024', value: 41 },
-        { countryiso3code: 'CAN', date: '2025', value: null }
-      ]),
-      [{ iso3: 'CAN', year: 2024, value: 41 }]
-    );
-  });
-
-  it('detects aggregates', () => {
-    assert.equal(isAggregate({ id: 'WLD', iso2Code: '1W', name: 'World', region: { id: 'NA', value: 'Aggregates' } }), true);
-  });
-});
-
-describe('latestByCountry', () => {
-  it('picks the most recent year within range', () => {
-    const latest = latestByCountry(
-      [
-        { iso3: 'CAN', year: 2020, value: 1 },
-        { iso3: 'CAN', year: 2023, value: 3 },
-        { iso3: 'CAN', year: 2022, value: 2 },
-        { iso3: 'MEX', year: 1990, value: 9 }
-      ],
-      2000
-    );
-    assert.deepEqual(latest.get('CAN'), { value: 3, year: 2023 });
-    assert.equal(latest.has('MEX'), false);
-  });
-});
-
-describe('buildDataset', () => {
-  const countries = [
-    { iso2: 'NO', iso3: 'NOR', name: 'Norway', region: 'Europe & Central Asia' },
-    { iso2: 'CA', iso3: 'CAN', name: 'Canada', region: 'North America' }
-  ];
-  const observations = new Map<MetricId, Map<string, { value: number; year: number }>>([
-    ['population', new Map([['NOR', { value: 5_500_000.4, year: 2024 }], ['CAN', { value: 41_000_000, year: 2024 }]])],
-    ['area', new Map([['CAN', { value: 9_984_670, year: 2022 }]])],
-    ['hdi', new Map([['NOR', { value: 0.96612, year: 2023 }]])]
-  ]);
-
-  it('rounds, sorts and drops countries missing required metrics', () => {
-    const dataset = buildDataset(countries, METRICS, observations, ['population', 'area']);
-    assert.deepEqual(dataset.countries.map(c => c.iso2), ['CA']);
-    const withoutArea = buildDataset(countries, METRICS, observations, ['population']);
-    assert.deepEqual(withoutArea.countries.map(c => c.iso2), ['CA', 'NO']);
-    assert.deepEqual(withoutArea.countries[1]!.metrics.population, { value: 5_500_000, year: 2024 });
-    assert.deepEqual(withoutArea.countries[1]!.metrics.hdi, { value: 0.966, year: 2023 });
-  });
-
-  it('reports coverage problems', () => {
-    const dataset = buildDataset(countries, METRICS, observations, ['population']);
-    const problems = validateDataset(dataset, METRICS, { required: ['population'], minCountries: 3, minPerMetric: 1 });
-    assert.ok(problems.some(p => p.startsWith('Only 2 countries')));
-    assert.ok(problems.some(p => p.startsWith('gdp:')));
-  });
-});
-
-describe('displayName', () => {
-  it('prefers overrides, then CLDR names, then the fallback', () => {
-    assert.equal(displayName('CD', 'Congo, Dem. Rep.'), 'DR Congo');
-    assert.equal(displayName('EG', 'Egypt, Arab Rep.'), 'Egypt');
-    assert.equal(displayName('JG', 'Channel Islands'), 'Channel Islands');
-  });
-});
-
-
-================================================================================
-FILE: tsconfig.node.json
-================================================================================
-{
-  "compilerOptions": {
-    "target": "ES2023",
-    "module": "NodeNext",
-    "moduleResolution": "NodeNext",
-    "lib": ["ES2023"],
-    "types": ["node"],
-    "skipLibCheck": true,
-    "allowImportingTsExtensions": true,
-    "resolveJsonModule": true,
-    "verbatimModuleSyntax": true,
-    "moduleDetection": "force",
-    "noEmit": true,
-    "strict": true,
-    "noUnusedLocals": true,
-    "noUnusedParameters": true,
-    "erasableSyntaxOnly": true,
-    "noFallthroughCasesInSwitch": true,
-    "noUncheckedIndexedAccess": true,
-    "exactOptionalPropertyTypes": true
-  },
-  "include": ["scripts/**/*.ts", "tests/**/*.ts"]
-}
-
-
-================================================================================
-FILE: .github/workflows/deploy.yml
-================================================================================
-name: Build and deploy
-
-on:
-  push:
-    branches: [main]
-  pull_request:
-  workflow_dispatch:
-  workflow_call:
-    inputs:
-      ref:
-        description: Commit to build and deploy
-        type: string
-        required: true
-
-permissions:
-  contents: read
-
-jobs:
-  build:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v7
-        with:
-          ref: ${{ inputs.ref || github.sha }}
-          persist-credentials: false
-
-      - name: Setup Node
-        uses: actions/setup-node@v7
-        with:
-          node-version: lts/*
-          cache: yarn
-
-      - name: Install dependencies
-        run: yarn install --frozen-lockfile
-
-      - name: Test
-        run: yarn test
-
-      - name: Build
-        run: yarn build
-
-      - name: Upload artifact
-        if: github.event_name != 'pull_request'
-        uses: actions/upload-pages-artifact@v5
-        with:
-          path: dist
-
-  deploy:
-    if: github.event_name != 'pull_request'
-    needs: build
-    runs-on: ubuntu-latest
-    permissions:
-      pages: write
-      id-token: write
-    concurrency:
-      group: pages
-      cancel-in-progress: false
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
-    steps:
-      - name: Configure Pages
-        uses: actions/configure-pages@v6
-
-      - name: Deploy to GitHub Pages
-        id: deployment
-        uses: actions/deploy-pages@v5
-
-
-================================================================================
-FILE: README.md
-================================================================================
-# 🌍 Country Quiz
-
-A client-side country comparison quiz game. Test your knowledge of world geography, economics, and demographics by comparing countries across various metrics.
-
-**Play now: [mycountryquiz.github.io](https://mycountryquiz.github.io)**
-
-## Features
-
-- **13 Quiz Categories**
-  - Population
-  - Area (km²)
-  - GDP (nominal, current US$)
-  - GDP per Capita
-  - GNI per Capita (PPP)
-  - Population Density
-  - Adult Literacy Rate
-  - Human Development Index (HDI)
-  - Life Expectancy
-  - Fertility Rate
-  - Urbanization (share of urban population)
-  - Internet Use (share of population)
-  - Forest Cover (share of land area)
-
-- **Every country with World Bank coverage** (~200 economies), each value shown with the year it was measured
-- **Automatically refreshed data** via a weekly GitHub Actions workflow
-- **No ties** — pairs with equal (or identically displayed) values are never asked
-- **Score Tracking**
-  - Current score (correct/total), current streak, best streak
-  - All stats persist in localStorage
-- **Audible and tactile feedback**
-  - Short synthesized tones (Web Audio API) and vibration (Vibration API) on taps, correct and wrong answers
-  - Toggle with the 🔊/🔇 button; the choice is remembered
-  - Vibration is unavailable on iOS Safari; sound still works
-- **Progressive Web App (PWA)**
-  - Installable ("Add to Home Screen")
-  - Works offline after first load (network-first service worker, same-origin only)
-- **Accessible** — real buttons, keyboard navigation, visible focus, reduced-motion support
-- **Fully Client-Side**
-  - No server, no data collection, no third-party requests at runtime
-  - Statistics are bundled into the app at build time
-
-## Tech Stack
-
-- **TypeScript 7** (native compiler)
-- **Vite 8** (Rolldown-based bundler)
-- **Vanilla TypeScript** - No framework dependencies
-- **Node.js test runner** - Unit tests with no extra dependencies
-- **GitHub Actions + GitHub Pages** - CI, scheduled data refresh, deployment
-- **Dependabot** - Weekly npm and GitHub Actions updates
-
-## Development
-
-### Prerequisites
-
-- Node.js 22.18+ (current LTS recommended; scripts run TypeScript directly via Node type stripping)
-- Yarn 1.x
-
-### Setup
-
-```sh
-git clone https://github.com/mycountryquiz/mycountryquiz.github.io.git
-cd mycountryquiz.github.io
-yarn install
-yarn dev
-```
-
-### Scripts
-
-| Command | Description |
-|---------|-------------|
-| `yarn dev` | Start dev server at localhost:5173 |
-| `yarn typecheck` | Type-check app, scripts and tests |
-| `yarn test` | Run unit tests |
-| `yarn build` | Type-check and build for production |
-| `yarn preview` | Preview production build locally |
-| `yarn update-data` | Fetch the latest statistics into `src/data/countries.json` |
-| `./scripts/dump-code.sh` | Export codebase to docs/llm/dump.txt |
-
-### Project Structure
-
-```
-├── src/
-│   ├── main.ts             # UI (QuizApp)
-│   ├── quiz.ts             # Pure game logic (round creation, tie guard)
-│   ├── metrics.ts          # Category definitions, sources and formatting
-│   ├── data.ts             # Loads bundled dataset, derives flags
-│   ├── storage.ts          # localStorage persistence
-│   ├── feedback.ts         # Sound and vibration
-│   ├── types.ts            # Shared types
-│   ├── style.css           # Responsive styling
-│   └── data/
-│       └── countries.json  # Generated dataset
-├── scripts/
-│   ├── update-data.ts      # Data refresh entry point
-│   ├── lib/                # HTTP, World Bank, OWID, dataset builder
-│   └── dump-code.sh        # Export code for LLM context
-├── tests/                  # node:test suites
-├── public/
-│   ├── manifest.json       # PWA manifest
-│   └── sw.js               # Offline service worker
-├── .github/
-│   ├── workflows/
-│   │   ├── deploy.yml      # Test, build, deploy (also reusable)
-│   │   └── update-data.yml # Weekly data refresh
-│   └── dependabot.yml
-├── index.html
-├── tsconfig.json           # App (browser)
-└── tsconfig.node.json      # Scripts and tests (Node)
-```
-
-## Data
-
-### Sources
-
-| Category | Source | Indicator |
-|----------|--------|-----------|
-| Population | World Bank WDI | `SP.POP.TOTL` |
-| Area | World Bank WDI | `AG.SRF.TOTL.K2` |
-| GDP | World Bank WDI | `NY.GDP.MKTP.CD` |
-| GDP per Capita | World Bank WDI | `NY.GDP.PCAP.CD` |
-| GNI per Capita (PPP) | World Bank WDI | `NY.GNP.PCAP.PP.CD` |
-| Population Density | World Bank WDI | `EN.POP.DNST` |
-| Adult Literacy Rate | World Bank WDI (UNESCO UIS) | `SE.ADT.LITR.ZS` |
-| HDI | UNDP Human Development Report via Our World in Data | `human-development-index` |
-| Life Expectancy | World Bank WDI | `SP.DYN.LE00.IN` |
-| Fertility Rate | World Bank WDI | `SP.DYN.TFRT.IN` |
-| Urbanization | World Bank WDI | `SP.URB.TOTL.IN.ZS` |
-| Internet Use | World Bank WDI (ITU) | `IT.NET.USER.ZS` |
-| Forest Cover | World Bank WDI (FAO) | `AG.LND.FRST.ZS` |
-
-- [World Bank Open Data](https://data.worldbank.org/) (CC BY 4.0)
-- [UNDP Human Development Reports](https://hdr.undp.org/) via [Our World in Data](https://ourworldindata.org/grapher/human-development-index) (CC BY 4.0)
-
-For every country and category the most recent non-empty value from the last 20 years is used, and the year is shown next to the value. Country names come from the Unicode CLDR (via `Intl.DisplayNames`) with a few short-form overrides; flags are derived from ISO 3166-1 codes. Regional aggregates and entries without population and area are excluded.
-
-### Automatic updates
-
-`.github/workflows/update-data.yml` runs every Monday (and on demand from the Actions tab):
-
-1. Runs `yarn update-data`, which fetches every metric, keeps the latest value per country, rounds to each metric's precision and writes a deterministically sorted `src/data/countries.json`.
-2. Rejects the result if coverage looks wrong (fewer than 180 countries, any category under 60 countries, duplicate codes) so a broken upstream response never reaches the site.
-3. Runs tests and a full build.
-4. Commits only when the data actually changed, then calls `deploy.yml` to publish that exact commit.
-
-The workflow pushes to `main` with `GITHUB_TOKEN`; if branch protection blocks this, allow GitHub Actions to bypass it or switch the commit step to open a pull request.
-
-To add a category, add an entry to `METRICS` in `src/metrics.ts` with a World Bank indicator or OWID chart slug, then run `yarn update-data`.
-
-## Privacy
-
-- No analytics, cookies, fingerprinting, or external requests at runtime
-- localStorage holds only score, streaks, selected category and the feedback toggle
-- The Web Audio API is used only to play tones; nothing is read back
-- The service worker caches same-origin files on your device and never contacts other hosts
-
-## AI Disclosure
-
-This project was developed with assistance from Claude (Anthropic). The codebase in `docs/llm/dump.txt` is exported for LLM context during development.
-
-This disclosure is for transparency only. There are no restrictions on using this code for AI training—knowledge should be shared freely. If you prefer human-only code for your training datasets, this notice allows you to make that choice.
-
-## License
-
-This project is licensed under the **GNU Affero General Public License v3.0 (AGPL-3.0)**.
-
-This means:
-- You can use, modify, and distribute this code
-- If you modify and deploy it as a network service, you must release your source code
-- Derivative works must also be licensed under AGPL-3.0
-- See [LICENSE](LICENSE) file for full terms
-
-## Contributing
-
-Contributions welcome! Please:
-1. Fork the repository
-2. Create a feature branch
-3. Make your changes
-4. Run `yarn test && yarn build` to ensure it passes and compiles
-5. Submit a pull request
-
-## Acknowledgments
-
-- Flag emojis from Unicode standard
-- Inspired by geography quiz games and the desire to learn more about our world
-
-
-================================================================================
-FILE: index.html
-================================================================================
-<!DOCTYPE html>
-<html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, user-scalable=no" />
-    <meta name="theme-color" content="#0f172a" />
-    <meta name="apple-mobile-web-app-capable" content="yes" />
-    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-    <title>Country Quiz</title>
-    <link rel="manifest" href="/manifest.json" />
-    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🌍</text></svg>" />
-  </head>
-  <body>
-    <div id="app"></div>
-    <script type="module" src="/src/main.ts"></script>
-  </body>
-</html>
-
-
-================================================================================
-FILE: package.json
-================================================================================
-{
-  "name": "countryquiz",
-  "private": true,
-  "version": "1.0.0",
-  "type": "module",
-  "license": "AGPL-3.0-only",
-  "engines": {
-    "node": ">=22.18.0"
-  },
-  "scripts": {
-    "dev": "vite",
-    "typecheck": "tsc -p tsconfig.json && tsc -p tsconfig.node.json",
-    "test": "node --test \"tests/**/*.test.ts\"",
-    "build": "tsc -p tsconfig.json && tsc -p tsconfig.node.json && vite build",
-    "preview": "vite preview",
-    "update-data": "node scripts/update-data.ts"
-  },
-  "devDependencies": {
-    "@types/node": "^24.19.4",
-    "typescript": "^7.0.2",
-    "vite": "^8.4.0"
-  }
-}
-
-
-================================================================================
-FILE: public/manifest.json
-================================================================================
-{
-  "name": "Country Quiz",
-  "short_name": "CountryQuiz",
-  "description": "Test your knowledge of world countries",
-  "start_url": "/",
-  "display": "standalone",
-  "background_color": "#0f172a",
-  "theme_color": "#0f172a",
-  "icons": [
-    {
-      "src": "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🌍</text></svg>",
-      "sizes": "any",
-      "type": "image/svg+xml"
-    }
-  ]
-}
-
-
-================================================================================
-FILE: public/vite.svg
-================================================================================
-<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" aria-hidden="true" role="img" class="iconify iconify--logos" width="31.88" height="32" preserveAspectRatio="xMidYMid meet" viewBox="0 0 256 257"><defs><linearGradient id="IconifyId1813088fe1fbc01fb466" x1="-.828%" x2="57.636%" y1="7.652%" y2="78.411%"><stop offset="0%" stop-color="#41D1FF"></stop><stop offset="100%" stop-color="#BD34FE"></stop></linearGradient><linearGradient id="IconifyId1813088fe1fbc01fb467" x1="43.376%" x2="50.316%" y1="2.242%" y2="89.03%"><stop offset="0%" stop-color="#FFEA83"></stop><stop offset="8.333%" stop-color="#FFDD35"></stop><stop offset="100%" stop-color="#FFA800"></stop></linearGradient></defs><path fill="url(#IconifyId1813088fe1fbc01fb466)" d="M255.153 37.938L134.897 252.976c-2.483 4.44-8.862 4.466-11.382.048L.875 37.958c-2.746-4.814 1.371-10.646 6.827-9.67l120.385 21.517a6.537 6.537 0 0 0 2.322-.004l117.867-21.483c5.438-.991 9.574 4.796 6.877 9.62Z"></path><path fill="url(#IconifyId1813088fe1fbc01fb467)" d="M185.432.063L96.44 17.501a3.268 3.268 0 0 0-2.634 3.014l-5.474 92.456a3.268 3.268 0 0 0 3.997 3.378l24.777-5.718c2.318-.535 4.413 1.507 3.936 3.838l-7.361 36.047c-.495 2.426 1.782 4.5 4.151 3.78l15.304-4.649c2.372-.72 4.652 1.36 4.15 3.788l-11.698 56.621c-.732 3.542 3.979 5.473 5.943 2.437l1.313-2.028l72.516-144.72c1.215-2.423-.88-5.186-3.54-4.672l-25.505 4.922c-2.396.462-4.435-1.77-3.759-4.114l16.646-57.705c.677-2.35-1.37-4.583-3.769-4.113Z"></path></svg>
-
-================================================================================
-FILE: scripts/dump-code.sh
-================================================================================
-#!/bin/sh
-# Dumps all project code to a single file for LLM context
-# Respects .gitignore patterns
-# Output: docs/llm/dump.txt
-
-set -e
-
-OUTPUT_DIR="docs/llm"
-OUTPUT_FILE="$OUTPUT_DIR/dump.txt"
-
-# Create output directory
-mkdir -p "$OUTPUT_DIR"
-
-# Clear/create output file
-> "$OUTPUT_FILE"
-
-echo "Dumping project code to $OUTPUT_FILE..."
-
-# Use git ls-files to get tracked files (respects .gitignore)
-# Falls back to find if not a git repo
-if git rev-parse --git-dir > /dev/null 2>&1; then
-    FILES=$(git ls-files --cached --others --exclude-standard 2>/dev/null)
-else
-    echo "Warning: Not a git repository, using find (may include ignored files)"
-    FILES=$(find . -type f \
-        ! -path './node_modules/*' \
-        ! -path './dist/*' \
-        ! -path './.git/*' \
-        ! -path './docs/llm/*' \
-        ! -name '*.lock' \
-        ! -name 'package-lock.json' \
-        | sed 's|^\./||')
-fi
-
-# File extensions to include
-is_code_file() {
-    case "$1" in
-        *.ts|*.tsx|*.js|*.jsx|*.mjs|*.cjs) return 0 ;;
-        *.css|*.scss|*.less) return 0 ;;
-        *.html|*.htm) return 0 ;;
-        *.json) return 0 ;;
-        *.md|*.txt) return 0 ;;
-        *.sh) return 0 ;;
-        *.yaml|*.yml) return 0 ;;
-        *.toml) return 0 ;;
-        *.svg) return 0 ;;
-        *) return 1 ;;
-    esac
-}
-
-# Skip certain files
-should_skip() {
-    case "$1" in
-        package-lock.json|pnpm-lock.yaml|yarn.lock) return 0 ;;
-        *.min.js|*.min.css) return 0 ;;
-        docs/llm/*) return 0 ;;
-        *) return 1 ;;
-    esac
-}
-
-count=0
-
-echo "$FILES" | while IFS= read -r file; do
-    # Skip empty lines
-    [ -z "$file" ] && continue
-    
-    # Skip if not a regular file
-    [ ! -f "$file" ] && continue
-    
-    # Skip non-code files
-    is_code_file "$file" || continue
-    
-    # Skip certain files
-    should_skip "$file" && continue
-    
-    # Get file size
-    size=$(wc -c < "$file" | tr -d ' ')
-    
-    # Skip files larger than 100KB
-    [ "$size" -gt 102400 ] && continue
-    
-    echo "================================================================================" >> "$OUTPUT_FILE"
-    echo "FILE: $file" >> "$OUTPUT_FILE"
-    echo "================================================================================" >> "$OUTPUT_FILE"
-    cat "$file" >> "$OUTPUT_FILE"
-    echo "" >> "$OUTPUT_FILE"
-    echo "" >> "$OUTPUT_FILE"
-    
-    count=$((count + 1))
-done
-
-# Count files (recount since subshell)
-file_count=$(grep -c "^FILE:" "$OUTPUT_FILE" 2>/dev/null || echo "0")
-total_size=$(wc -c < "$OUTPUT_FILE" | tr -d ' ')
-
-echo "Done! Dumped $file_count files ($total_size bytes) to $OUTPUT_FILE"
-
-
-================================================================================
-FILE: src/data.ts
-================================================================================
-import raw from './data/countries.json' with { type: 'json' };
-import type { Country, Dataset } from './types.ts';
-
-const REGIONAL_INDICATOR_OFFSET = 0x1f1e6 - 'A'.charCodeAt(0);
-
-export const toFlag = (iso2: string): string =>
-  String.fromCodePoint(...[...iso2.toUpperCase()].map(c => c.charCodeAt(0) + REGIONAL_INDICATOR_OFFSET));
-
-const dataset = raw as Dataset;
-
-export const COUNTRIES: readonly Country[] = dataset.countries.map(c => ({ ...c, flag: toFlag(c.iso2) }));
-
-
-================================================================================
 FILE: src/main.ts
 ================================================================================
 import './style.css';
@@ -4545,6 +4086,186 @@ document.addEventListener('DOMContentLoaded', () => {
   new QuizApp(byId('app'));
   registerServiceWorker();
 });
+
+
+================================================================================
+FILE: src/metrics.ts
+================================================================================
+import type { Metric, MetricId } from './types.ts';
+
+const number = (digits: number) =>
+  new Intl.NumberFormat(undefined, { minimumFractionDigits: digits, maximumFractionDigits: digits });
+const usd = (options: Intl.NumberFormatOptions) =>
+  new Intl.NumberFormat(undefined, { style: 'currency', currency: 'USD', ...options });
+
+const integer = number(0);
+const oneDecimal = number(1);
+const twoDecimals = number(2);
+const threeDecimals = number(3);
+const usdCompact = usd({ notation: 'compact', maximumFractionDigits: 2 });
+const usdWhole = usd({ maximumFractionDigits: 0 });
+
+const worldBank = (indicator: string) => ({ kind: 'worldBank', indicator }) as const;
+const percent = (v: number) => `${oneDecimal.format(v)}%`;
+
+export const METRICS: readonly Metric[] = [
+  {
+    id: 'population', label: 'Population', question: 'Which country has a larger population?',
+    precision: 0, source: worldBank('SP.POP.TOTL'), format: v => integer.format(v)
+  },
+  {
+    id: 'area', label: 'Area', question: 'Which country is larger by area?',
+    precision: 0, source: worldBank('AG.SRF.TOTL.K2'), format: v => `${integer.format(v)} km²`
+  },
+  {
+    id: 'gdp', label: 'GDP', question: 'Which country has a higher GDP?',
+    precision: 0, source: worldBank('NY.GDP.MKTP.CD'), format: v => usdCompact.format(v)
+  },
+  {
+    id: 'gdp_per_capita', label: 'GDP per Capita', question: 'Which country has a higher GDP per capita?',
+    precision: 0, source: worldBank('NY.GDP.PCAP.CD'), format: v => usdWhole.format(v)
+  },
+  {
+    id: 'gni_per_capita_ppp', label: 'GNI per Capita (PPP)', question: 'Which country has a higher GNI per capita (PPP)?',
+    precision: 0, source: worldBank('NY.GNP.PCAP.PP.CD'), format: v => `${usdWhole.format(v)} PPP`
+  },
+  {
+    id: 'density', label: 'Pop. Density', question: 'Which country has a higher population density?',
+    precision: 1, source: worldBank('EN.POP.DNST'), format: v => `${oneDecimal.format(v)}/km²`
+  },
+  {
+    id: 'literacy', label: 'Literacy Rate', question: 'Which country has a higher adult literacy rate?',
+    precision: 1, source: worldBank('SE.ADT.LITR.ZS'), format: percent
+  },
+  {
+    id: 'hdi', label: 'HDI', question: 'Which country has a higher Human Development Index?',
+    precision: 3, source: { kind: 'owid', chart: 'human-development-index' }, format: v => threeDecimals.format(v)
+  },
+  {
+    id: 'life_expectancy', label: 'Life Expectancy', question: 'Which country has a higher life expectancy?',
+    precision: 1, source: worldBank('SP.DYN.LE00.IN'), format: v => `${oneDecimal.format(v)} years`
+  },
+  {
+    id: 'fertility', label: 'Fertility Rate', question: 'Which country has a higher fertility rate?',
+    precision: 2, source: worldBank('SP.DYN.TFRT.IN'), format: v => `${twoDecimals.format(v)} births/woman`
+  },
+  {
+    id: 'urban_population', label: 'Urbanization', question: 'Which country has a higher share of people living in cities?',
+    precision: 1, source: worldBank('SP.URB.TOTL.IN.ZS'), format: percent
+  },
+  {
+    id: 'internet_users', label: 'Internet Use', question: 'Which country has a higher share of internet users?',
+    precision: 1, source: worldBank('IT.NET.USER.ZS'), format: percent
+  },
+  {
+    id: 'forest_area', label: 'Forest Cover', question: 'Which country has a higher share of land covered by forest?',
+    precision: 1, source: worldBank('AG.LND.FRST.ZS'), format: percent
+  }
+];
+
+export const DEFAULT_METRIC_ID: MetricId = 'population';
+
+export const findMetric = (id: string): Metric | undefined => METRICS.find(m => m.id === id);
+
+
+================================================================================
+FILE: src/quiz.ts
+================================================================================
+import type { Country, Metric } from './types.ts';
+
+export interface Round {
+  readonly metric: Metric;
+  readonly first: Country;
+  readonly second: Country;
+  readonly answer: Country;
+}
+
+export type Random = () => number;
+
+const MAX_ATTEMPTS = 200;
+
+export const valueOf = (metric: Metric, country: Country): number | undefined => country.metrics[metric.id]?.value;
+
+export const isDistinguishable = (metric: Metric, a: Country, b: Country): boolean => {
+  const va = valueOf(metric, a);
+  const vb = valueOf(metric, b);
+  return va !== undefined && vb !== undefined && va !== vb && metric.format(va) !== metric.format(vb);
+};
+
+const candidatesFor = (metric: Metric, countries: readonly Country[]): Country[] =>
+  countries.filter(c => valueOf(metric, c) !== undefined);
+
+export const isPlayable = (metric: Metric, countries: readonly Country[]): boolean =>
+  new Set(candidatesFor(metric, countries).map(c => metric.format(valueOf(metric, c)!))).size >= 2;
+
+export const createRound = (metric: Metric, countries: readonly Country[], random: Random = Math.random): Round | null => {
+  const pool = candidatesFor(metric, countries);
+  if (pool.length < 2) return null;
+
+  const pick = () => pool[Math.floor(random() * pool.length)]!;
+  for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
+    const first = pick();
+    const second = pick();
+    if (first.iso2 !== second.iso2 && isDistinguishable(metric, first, second)) {
+      const answer = valueOf(metric, first)! > valueOf(metric, second)! ? first : second;
+      return { metric, first, second, answer };
+    }
+  }
+  return null;
+};
+
+
+================================================================================
+FILE: src/storage.ts
+================================================================================
+import { DEFAULT_METRIC_ID } from './metrics.ts';
+
+export interface Stats {
+  correctAnswers: number;
+  totalQuestions: number;
+  currentStreak: number;
+  bestStreak: number;
+}
+
+export interface Settings {
+  selectedQuestionId: string;
+  feedbackEnabled: boolean;
+}
+
+export type PersistedState = Stats & Settings;
+
+const STORAGE_KEY = 'countryQuizState';
+
+export const EMPTY_STATS: Readonly<Stats> = { correctAnswers: 0, totalQuestions: 0, currentStreak: 0, bestStreak: 0 };
+
+const DEFAULTS: Readonly<PersistedState> = { ...EMPTY_STATS, selectedQuestionId: DEFAULT_METRIC_ID, feedbackEnabled: true };
+
+const count = (value: unknown, fallback: number): number =>
+  typeof value === 'number' && Number.isInteger(value) && value >= 0 ? value : fallback;
+
+export const loadState = (): PersistedState => {
+  try {
+    const parsed: Record<string, unknown> = JSON.parse(localStorage.getItem(STORAGE_KEY) ?? '{}');
+    return {
+      correctAnswers: count(parsed['correctAnswers'], DEFAULTS.correctAnswers),
+      totalQuestions: count(parsed['totalQuestions'], DEFAULTS.totalQuestions),
+      currentStreak: count(parsed['currentStreak'], DEFAULTS.currentStreak),
+      bestStreak: count(parsed['bestStreak'], DEFAULTS.bestStreak),
+      selectedQuestionId: typeof parsed['selectedQuestionId'] === 'string' ? parsed['selectedQuestionId'] : DEFAULTS.selectedQuestionId,
+      feedbackEnabled: typeof parsed['feedbackEnabled'] === 'boolean' ? parsed['feedbackEnabled'] : DEFAULTS.feedbackEnabled
+    };
+  } catch {
+    return { ...DEFAULTS };
+  }
+};
+
+export const saveState = (state: PersistedState): void => {
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+  } catch (e) {
+    console.warn('Failed to save state:', e);
+  }
+};
 
 
 ================================================================================
@@ -4837,6 +4558,257 @@ body {
 
 
 ================================================================================
+FILE: src/types.ts
+================================================================================
+export type MetricId =
+  | 'population'
+  | 'area'
+  | 'gdp'
+  | 'gdp_per_capita'
+  | 'gni_per_capita_ppp'
+  | 'density'
+  | 'literacy'
+  | 'hdi'
+  | 'life_expectancy'
+  | 'fertility'
+  | 'urban_population'
+  | 'internet_users'
+  | 'forest_area';
+
+export type MetricSource =
+  | { readonly kind: 'worldBank'; readonly indicator: string }
+  | { readonly kind: 'owid'; readonly chart: string };
+
+export interface Metric {
+  readonly id: MetricId;
+  readonly label: string;
+  readonly question: string;
+  readonly precision: number;
+  readonly source: MetricSource;
+  readonly format: (value: number) => string;
+}
+
+export interface Observation {
+  value: number;
+  year?: number;
+}
+
+export interface CountryRecord {
+  iso2: string;
+  iso3?: string;
+  name: string;
+  region: string;
+  metrics: Partial<Record<MetricId, Observation>>;
+}
+
+export interface Dataset {
+  countries: CountryRecord[];
+}
+
+export interface Country extends CountryRecord {
+  flag: string;
+}
+
+
+================================================================================
+FILE: tests/data.test.ts
+================================================================================
+import assert from 'node:assert/strict';
+import { describe, it } from 'node:test';
+import { COUNTRIES, toFlag } from '../src/data.ts';
+import { METRICS } from '../src/metrics.ts';
+import { isPlayable } from '../src/quiz.ts';
+
+describe('bundled dataset', () => {
+  it('has unique ISO codes', () => assert.equal(new Set(COUNTRIES.map(c => c.iso2)).size, COUNTRIES.length));
+
+  it('has valid ISO 3166-1 alpha-2 codes and names', () => {
+    for (const c of COUNTRIES) {
+      assert.match(c.iso2, /^[A-Z]{2}$/);
+      assert.ok(c.name.trim().length > 0);
+    }
+  });
+
+  it('only contains finite metric values for known metrics', () => {
+    const known = new Set<string>(METRICS.map(m => m.id));
+    for (const c of COUNTRIES) {
+      for (const [id, observation] of Object.entries(c.metrics)) {
+        assert.ok(known.has(id), `${c.iso2} has unknown metric ${id}`);
+        assert.ok(Number.isFinite(observation.value), `${c.iso2}.${id} is not finite`);
+      }
+    }
+  });
+
+  it('keeps the core categories playable', () => {
+    for (const id of ['population', 'area', 'gdp', 'life_expectancy']) {
+      assert.ok(isPlayable(METRICS.find(m => m.id === id)!, COUNTRIES), id);
+    }
+  });
+});
+
+describe('toFlag', () => {
+  it('builds regional indicator flags', () => assert.equal(toFlag('ca'), '🇨🇦'));
+});
+
+
+================================================================================
+FILE: tests/quiz.test.ts
+================================================================================
+import assert from 'node:assert/strict';
+import { describe, it } from 'node:test';
+import { findMetric } from '../src/metrics.ts';
+import { createRound, isDistinguishable, isPlayable } from '../src/quiz.ts';
+import type { Country, Metric } from '../src/types.ts';
+
+const metric = findMetric('literacy')!;
+
+const country = (iso2: string, literacy?: number): Country => ({
+  iso2,
+  name: iso2,
+  region: 'Test',
+  flag: '',
+  metrics: literacy === undefined ? {} : { literacy: { value: literacy } }
+});
+
+const sequence = (...values: number[]) => {
+  let i = 0;
+  return () => values[i++ % values.length]!;
+};
+
+describe('isDistinguishable', () => {
+  it('rejects equal values', () => assert.equal(isDistinguishable(metric, country('AA', 99), country('BB', 99)), false));
+  it('rejects values that format identically', () => assert.equal(isDistinguishable(metric, country('AA', 99.01), country('BB', 99.04)), false));
+  it('rejects missing values', () => assert.equal(isDistinguishable(metric, country('AA'), country('BB', 50)), false));
+  it('accepts distinct values', () => assert.equal(isDistinguishable(metric, country('AA', 98), country('BB', 99)), true));
+});
+
+describe('createRound', () => {
+  it('picks the higher value as the answer', () => {
+    const round = createRound(metric, [country('AA', 40), country('BB', 90)], sequence(0, 0.9));
+    assert.ok(round);
+    assert.equal(round.answer.iso2, 'BB');
+  });
+
+  it('never pairs a country with itself or a tie', () => {
+    const pool = [country('AA', 50), country('BB', 50), country('CC', 70)];
+    for (let i = 0; i < 200; i++) {
+      const round = createRound(metric, pool);
+      assert.ok(round);
+      assert.notEqual(round.first.iso2, round.second.iso2);
+      assert.ok(isDistinguishable(metric, round.first, round.second));
+    }
+  });
+
+  it('returns null when no valid pair exists', () => {
+    assert.equal(createRound(metric, [country('AA', 50), country('BB', 50)]), null);
+    assert.equal(createRound(metric, [country('AA', 50), country('BB')]), null);
+  });
+});
+
+describe('isPlayable', () => {
+  const m: Metric = metric;
+  it('requires at least two distinguishable values', () => {
+    assert.equal(isPlayable(m, [country('AA', 50), country('BB', 50)]), false);
+    assert.equal(isPlayable(m, [country('AA', 50), country('BB', 60)]), true);
+  });
+});
+
+
+================================================================================
+FILE: tests/update-data.test.ts
+================================================================================
+import assert from 'node:assert/strict';
+import { describe, it } from 'node:test';
+import { buildDataset, displayName, validateDataset } from '../scripts/lib/dataset.ts';
+import { latestByCountry } from '../scripts/lib/observations.ts';
+import { parseCsv, toRawObservations as fromOwid } from '../scripts/lib/owid.ts';
+import { isAggregate, toRawObservations as fromWorldBank } from '../scripts/lib/world-bank.ts';
+import { METRICS } from '../src/metrics.ts';
+import type { MetricId } from '../src/types.ts';
+
+describe('parseCsv', () => {
+  it('handles quotes, escaped quotes and CRLF', () => {
+    assert.deepEqual(parseCsv('a,b\r\n"x, y","say ""hi"""\r\n'), [['a', 'b'], ['x, y', 'say "hi"']]);
+  });
+});
+
+describe('OWID rows', () => {
+  it('keeps ISO3 rows with values only', () => {
+    const rows = parseCsv('Entity,Code,Year,Human Development Index\nWorld,OWID_WRL,2023,0.75\nNorway,NOR,2023,0.97\nChad,TCD,2023,\n');
+    assert.deepEqual(fromOwid(rows), [{ iso3: 'NOR', year: 2023, value: 0.97 }]);
+  });
+});
+
+describe('World Bank rows', () => {
+  it('drops null values', () => {
+    assert.deepEqual(
+      fromWorldBank([
+        { countryiso3code: 'CAN', date: '2024', value: 41 },
+        { countryiso3code: 'CAN', date: '2025', value: null }
+      ]),
+      [{ iso3: 'CAN', year: 2024, value: 41 }]
+    );
+  });
+
+  it('detects aggregates', () => {
+    assert.equal(isAggregate({ id: 'WLD', iso2Code: '1W', name: 'World', region: { id: 'NA', value: 'Aggregates' } }), true);
+  });
+});
+
+describe('latestByCountry', () => {
+  it('picks the most recent year within range', () => {
+    const latest = latestByCountry(
+      [
+        { iso3: 'CAN', year: 2020, value: 1 },
+        { iso3: 'CAN', year: 2023, value: 3 },
+        { iso3: 'CAN', year: 2022, value: 2 },
+        { iso3: 'MEX', year: 1990, value: 9 }
+      ],
+      2000
+    );
+    assert.deepEqual(latest.get('CAN'), { value: 3, year: 2023 });
+    assert.equal(latest.has('MEX'), false);
+  });
+});
+
+describe('buildDataset', () => {
+  const countries = [
+    { iso2: 'NO', iso3: 'NOR', name: 'Norway', region: 'Europe & Central Asia' },
+    { iso2: 'CA', iso3: 'CAN', name: 'Canada', region: 'North America' }
+  ];
+  const observations = new Map<MetricId, Map<string, { value: number; year: number }>>([
+    ['population', new Map([['NOR', { value: 5_500_000.4, year: 2024 }], ['CAN', { value: 41_000_000, year: 2024 }]])],
+    ['area', new Map([['CAN', { value: 9_984_670, year: 2022 }]])],
+    ['hdi', new Map([['NOR', { value: 0.96612, year: 2023 }]])]
+  ]);
+
+  it('rounds, sorts and drops countries missing required metrics', () => {
+    const dataset = buildDataset(countries, METRICS, observations, ['population', 'area']);
+    assert.deepEqual(dataset.countries.map(c => c.iso2), ['CA']);
+    const withoutArea = buildDataset(countries, METRICS, observations, ['population']);
+    assert.deepEqual(withoutArea.countries.map(c => c.iso2), ['CA', 'NO']);
+    assert.deepEqual(withoutArea.countries[1]!.metrics.population, { value: 5_500_000, year: 2024 });
+    assert.deepEqual(withoutArea.countries[1]!.metrics.hdi, { value: 0.966, year: 2023 });
+  });
+
+  it('reports coverage problems', () => {
+    const dataset = buildDataset(countries, METRICS, observations, ['population']);
+    const problems = validateDataset(dataset, METRICS, { required: ['population'], minCountries: 3, minPerMetric: 1 });
+    assert.ok(problems.some(p => p.startsWith('Only 2 countries')));
+    assert.ok(problems.some(p => p.startsWith('gdp:')));
+  });
+});
+
+describe('displayName', () => {
+  it('prefers overrides, then CLDR names, then the fallback', () => {
+    assert.equal(displayName('CD', 'Congo, Dem. Rep.'), 'DR Congo');
+    assert.equal(displayName('EG', 'Egypt, Arab Rep.'), 'Egypt');
+    assert.equal(displayName('JG', 'Channel Islands'), 'Channel Islands');
+  });
+});
+
+
+================================================================================
 FILE: tsconfig.json
 ================================================================================
 {
@@ -4863,6 +4835,34 @@ FILE: tsconfig.json
     "exactOptionalPropertyTypes": true
   },
   "include": ["src"]
+}
+
+
+================================================================================
+FILE: tsconfig.node.json
+================================================================================
+{
+  "compilerOptions": {
+    "target": "ES2023",
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "lib": ["ES2023"],
+    "types": ["node"],
+    "skipLibCheck": true,
+    "allowImportingTsExtensions": true,
+    "resolveJsonModule": true,
+    "verbatimModuleSyntax": true,
+    "moduleDetection": "force",
+    "noEmit": true,
+    "strict": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "erasableSyntaxOnly": true,
+    "noFallthroughCasesInSwitch": true,
+    "noUncheckedIndexedAccess": true,
+    "exactOptionalPropertyTypes": true
+  },
+  "include": ["scripts/**/*.ts", "tests/**/*.ts"]
 }
 
 
