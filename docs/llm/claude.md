@@ -424,3 +424,77 @@ also when pressing buttons we need some kind of audible and tactile feedback
 repo is public at github.com/mycountryquiz/mycountryquiz.github.io 
 website is at https://mycountryquiz.github.io/ 
 prefer typescript 7 and 7.1 where possible 
+
+Now the CSS — let me see the rest of it.
+
+Now tests.
+
+Everything you asked for is in the tarball. `yarn typecheck`, `yarn test` (21 tests) and `yarn build` all pass, and I checked the built site at phone size: no console errors, and the whole screen still fits without scrolling. To apply it, run `tar -xzf mycountryquiz-update.tar.gz` from the repo root. It has 31 files, and **nothing needs to be deleted**.
+
+**Run "Update country data" once by hand.** I couldn't reach the World Bank or Our World in Data from here, so the data script has only been checked by unit tests and has never actually fetched anything. For now `src/data/countries.json` holds your existing 84 countries, converted to the new format. Run the workflow from the Actions tab: that's the first real test of the fetch, and it should bring in about 200 countries, each value labelled with its year. The 4 new categories (fertility, urbanization, internet use, forest cover) only appear once they have data.
+
+**Versions**
+- TypeScript is 7.0.2, set as `^7` so 7.1 comes in automatically once it's stable (it's in beta now).
+- Vite is 8.4.0. Rolldown is built into Vite 8, so the `rolldown-vite` override is gone.
+- `@types/node` 24 is new; it's needed to type-check the Node scripts.
+- Actions: `checkout@v7`, `setup-node@v7` (Node `lts/*`), `configure-pages@v6`, `upload-pages-artifact@v5`, `deploy-pages@v5`.
+- Dependabot now checks npm packages and actions every week.
+- The `global.json` / .NET rc3 part doesn't apply here: this repo has no .NET.
+
+**Automatic data updates**
+- A new workflow runs every Monday and can also be started by hand. It pulls 12 World Bank indicators, plus HDI from UNDP via Our World in Data.
+- It refuses to save the data if anything looks off: fewer than 180 countries, any category under 60 countries, or duplicate country codes.
+- It runs the tests and build before saving, commits only when the data actually changed, then deploys that commit.
+- It pushes to `main` directly. If you have branch protection on `main`, you'll need to let Actions bypass it.
+
+**Sound and vibration**
+- Taps, right answers and wrong answers each get a short tone generated in the browser and a vibration pattern.
+- A 🔊/🔇 button turns both off, and the choice is saved.
+- iPhones don't support web vibration, so they only get the sound.
+
+**Other changes**
+- The code is split into separate files for game logic, categories, storage and feedback, with the screen code in its own class.
+- Country cards are now real buttons, so they work with the keyboard.
+- I added a small offline service worker, so the README's "works offline" claim is now true.
+- The README is updated, and `docs/llm/dump.txt` is regenerated.
+
+07
+57
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

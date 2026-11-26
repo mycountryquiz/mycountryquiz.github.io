@@ -1,59 +1,3928 @@
 ================================================================================
-FILE: .github/workflows/deploy.yml
+FILE: .github/dependabot.yml
 ================================================================================
-name: Deploy to GitHub Pages
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      npm:
+        patterns: ['*']
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      actions:
+        patterns: ['*']
+
+
+================================================================================
+FILE: .github/workflows/update-data.yml
+================================================================================
+name: Update country data
 
 on:
-  push:
-    branches: [main]
+  schedule:
+    - cron: '37 5 * * 1'
   workflow_dispatch:
 
 permissions:
   contents: read
-  pages: write
-  id-token: write
 
 concurrency:
-  group: pages
+  group: update-data
   cancel-in-progress: false
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    outputs:
+      changed: ${{ steps.commit.outputs.changed }}
+      sha: ${{ steps.commit.outputs.sha }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Setup Node
+        uses: actions/setup-node@v7
+        with:
+          node-version: lts/*
+          cache: yarn
+
+      - name: Install dependencies
+        run: yarn install --frozen-lockfile
+
+      - name: Fetch latest data
+        run: yarn update-data
+
+      - name: Verify
+        run: |
+          yarn test
+          yarn build
+
+      - name: Commit changes
+        id: commit
+        run: |
+          if git diff --quiet -- src/data; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/data
+          git commit -m "chore(data): refresh country statistics"
+          git push
+          echo "changed=true" >> "$GITHUB_OUTPUT"
+          echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+  deploy:
+    needs: update
+    if: needs.update.outputs.changed == 'true'
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    uses: ./.github/workflows/deploy.yml
+    with:
+      ref: ${{ needs.update.outputs.sha }}
+
+
+================================================================================
+FILE: public/sw.js
+================================================================================
+const CACHE = 'country-quiz-v1';
+
+self.addEventListener('install', () => self.skipWaiting());
+
+self.addEventListener('activate', event => {
+  event.waitUntil(
+    caches.keys()
+      .then(keys => Promise.all(keys.filter(key => key !== CACHE).map(key => caches.delete(key))))
+      .then(() => self.clients.claim())
+  );
+});
+
+self.addEventListener('fetch', event => {
+  const { request } = event;
+  if (request.method !== 'GET' || new URL(request.url).origin !== self.location.origin) return;
+  event.respondWith(
+    fetch(request)
+      .then(response => {
+        if (response.ok) {
+          const copy = response.clone();
+          event.waitUntil(caches.open(CACHE).then(cache => cache.put(request, copy)));
+        }
+        return response;
+      })
+      .catch(() => caches.match(request).then(cached => cached ?? caches.match('/')).then(cached => cached ?? Response.error()))
+  );
+});
+
+
+================================================================================
+FILE: scripts/lib/dataset.ts
+================================================================================
+import type { CountryRecord, Dataset, Metric, MetricId, Observation } from '../../src/types.ts';
+import type { ObservationsByIso3 } from './observations.ts';
+
+export interface SourceCountry {
+  iso2: string;
+  iso3: string;
+  name: string;
+  region: string;
+}
+
+export interface CoverageRule {
+  readonly required: readonly MetricId[];
+  readonly minCountries: number;
+  readonly minPerMetric: number;
+}
+
+const NAME_OVERRIDES: Readonly<Record<string, string>> = {
+  CD: 'DR Congo',
+  CG: 'Republic of the Congo',
+  HK: 'Hong Kong',
+  MO: 'Macao',
+  MM: 'Myanmar',
+  PS: 'Palestine',
+  FM: 'Micronesia',
+  CI: "Côte d'Ivoire"
+};
+
+const regionNames = new Intl.DisplayNames(['en'], { type: 'region', fallback: 'code' });
+
+export const isoName = (iso2: string): string | null => {
+  if (!/^[A-Z]{2}$/.test(iso2)) return null;
+  const name = regionNames.of(iso2);
+  return name && name !== iso2 ? name : null;
+};
+
+export const displayName = (iso2: string, fallback: string): string => NAME_OVERRIDES[iso2] ?? isoName(iso2) ?? fallback;
+
+const round = (value: number, precision: number): number => {
+  const factor = 10 ** precision;
+  return Math.round(value * factor) / factor;
+};
+
+export const buildDataset = (
+  countries: readonly SourceCountry[],
+  metrics: readonly Metric[],
+  observations: ReadonlyMap<MetricId, ObservationsByIso3>,
+  required: readonly MetricId[]
+): Dataset => {
+  const records = countries.flatMap((country): CountryRecord[] => {
+    const entries = metrics.flatMap((metric): [MetricId, Observation][] => {
+      const found = observations.get(metric.id)?.get(country.iso3);
+      return found ? [[metric.id, { value: round(found.value, metric.precision), year: found.year }]] : [];
+    });
+    const values = Object.fromEntries(entries) as CountryRecord['metrics'];
+    if (required.some(id => values[id] === undefined)) return [];
+    return [{ iso2: country.iso2, iso3: country.iso3, name: country.name, region: country.region, metrics: values }];
+  });
+  records.sort((a, b) => a.name.localeCompare(b.name, 'en') || a.iso2.localeCompare(b.iso2));
+  return { countries: records };
+};
+
+export const validateDataset = (dataset: Dataset, metrics: readonly Metric[], rule: CoverageRule): string[] => {
+  const problems: string[] = [];
+  const { countries } = dataset;
+  if (countries.length < rule.minCountries) problems.push(`Only ${countries.length} countries (minimum ${rule.minCountries})`);
+  const duplicates = countries.length - new Set(countries.map(c => c.iso2)).size;
+  if (duplicates > 0) problems.push(`${duplicates} duplicate ISO codes`);
+  for (const metric of metrics) {
+    const covered = countries.filter(c => c.metrics[metric.id] !== undefined).length;
+    if (covered < rule.minPerMetric) problems.push(`${metric.id}: only ${covered} countries (minimum ${rule.minPerMetric})`);
+  }
+  return problems;
+};
+
+export const serialize = (dataset: Dataset): string => `${JSON.stringify(dataset, null, 2)}\n`;
+
+
+================================================================================
+FILE: scripts/lib/http.ts
+================================================================================
+const USER_AGENT = 'mycountryquiz-data-updater (+https://github.com/mycountryquiz/mycountryquiz.github.io)';
+const TIMEOUT_MS = 60_000;
+const ATTEMPTS = 4;
+
+const isRetryable = (status: number): boolean => status === 429 || status >= 500;
+const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+
+export const fetchText = async (url: string): Promise<string> => {
+  let lastError: unknown;
+  for (let attempt = 1; attempt <= ATTEMPTS; attempt++) {
+    try {
+      const response = await fetch(url, {
+        headers: { 'User-Agent': USER_AGENT },
+        signal: AbortSignal.timeout(TIMEOUT_MS)
+      });
+      if (response.ok) return await response.text();
+      lastError = new Error(`${response.status} ${response.statusText} for ${url}`);
+      if (!isRetryable(response.status)) break;
+    } catch (error) {
+      lastError = error;
+    }
+    if (attempt < ATTEMPTS) await sleep(1000 * 2 ** attempt);
+  }
+  throw lastError instanceof Error ? lastError : new Error(`Failed to fetch ${url}`);
+};
+
+export const fetchJson = async <T>(url: string): Promise<T> => JSON.parse(await fetchText(url)) as T;
+
+
+================================================================================
+FILE: scripts/lib/observations.ts
+================================================================================
+import type { Observation } from '../../src/types.ts';
+
+export type ObservationsByIso3 = Map<string, Required<Observation>>;
+
+export interface RawObservation {
+  iso3: string;
+  year: number;
+  value: number;
+}
+
+export const latestByCountry = (rows: Iterable<RawObservation>, minYear: number): ObservationsByIso3 => {
+  const latest: ObservationsByIso3 = new Map();
+  for (const { iso3, year, value } of rows) {
+    if (!iso3 || !Number.isFinite(value) || !Number.isInteger(year) || year < minYear) continue;
+    const current = latest.get(iso3);
+    if (!current || year > current.year) latest.set(iso3, { value, year });
+  }
+  return latest;
+};
+
+
+================================================================================
+FILE: scripts/lib/owid.ts
+================================================================================
+import { fetchText } from './http.ts';
+import type { RawObservation } from './observations.ts';
+
+const KEY_COLUMNS = ['Entity', 'Code', 'Year'] as const;
+
+export const parseCsv = (text: string): string[][] => {
+  const rows: string[][] = [];
+  let row: string[] = [];
+  let field = '';
+  let quoted = false;
+  for (let i = 0; i < text.length; i++) {
+    const char = text[i]!;
+    if (quoted) {
+      if (char === '"' && text[i + 1] === '"') {
+        field += '"';
+        i++;
+      } else if (char === '"') {
+        quoted = false;
+      } else {
+        field += char;
+      }
+    } else if (char === '"') {
+      quoted = true;
+    } else if (char === ',') {
+      row.push(field);
+      field = '';
+    } else if (char === '\n' || char === '\r') {
+      if (char === '\r' && text[i + 1] === '\n') i++;
+      row.push(field);
+      rows.push(row);
+      row = [];
+      field = '';
+    } else {
+      field += char;
+    }
+  }
+  if (field !== '' || row.length > 0) {
+    row.push(field);
+    rows.push(row);
+  }
+  return rows.filter(r => r.some(cell => cell !== ''));
+};
+
+export const toRawObservations = (rows: readonly string[][]): RawObservation[] => {
+  const [header, ...data] = rows;
+  if (!header) return [];
+  const columnOf = (name: string): number => {
+    const index = header.indexOf(name);
+    if (index === -1) throw new Error(`OWID CSV is missing column "${name}": ${header.join(',')}`);
+    return index;
+  };
+  const code = columnOf('Code');
+  const year = columnOf('Year');
+  const value = header.findIndex(name => !(KEY_COLUMNS as readonly string[]).includes(name));
+  if (value === -1) throw new Error(`OWID CSV has no value column: ${header.join(',')}`);
+  return data.flatMap(r => {
+    const iso3 = r[code] ?? '';
+    const raw = r[value] ?? '';
+    return /^[A-Z]{3}$/.test(iso3) && raw !== '' ? [{ iso3, year: Number(r[year]), value: Number(raw) }] : [];
+  });
+};
+
+export const fetchChart = async (chart: string): Promise<RawObservation[]> => {
+  const params = new URLSearchParams({ v: '1', csvType: 'full', useColumnShortNames: 'false' });
+  return toRawObservations(parseCsv(await fetchText(`https://ourworldindata.org/grapher/${encodeURIComponent(chart)}.csv?${params}`)));
+};
+
+
+================================================================================
+FILE: scripts/lib/world-bank.ts
+================================================================================
+import { fetchJson } from './http.ts';
+import type { RawObservation } from './observations.ts';
+
+const API = 'https://api.worldbank.org/v2';
+const PAGE_SIZE = 20_000;
+
+interface PageInfo {
+  page: number;
+  pages: number;
+}
+
+type ApiResponse<T> = [PageInfo, T[] | null] | [{ message: unknown }];
+
+export interface WorldBankCountry {
+  id: string;
+  iso2Code: string;
+  name: string;
+  region: { id: string; value: string };
+}
+
+interface IndicatorRow {
+  countryiso3code: string;
+  date: string;
+  value: number | null;
+}
+
+const fetchAllPages = async <T>(path: string, query: Record<string, string>): Promise<T[]> => {
+  const rows: T[] = [];
+  for (let page = 1, pages = 1; page <= pages; page++) {
+    const params = new URLSearchParams({ ...query, format: 'json', per_page: String(PAGE_SIZE), page: String(page) });
+    const body = await fetchJson<ApiResponse<T>>(`${API}/${path}?${params}`);
+    const [info, data] = body;
+    if (!('pages' in info)) throw new Error(`World Bank API error for ${path}: ${JSON.stringify(info.message)}`);
+    pages = info.pages;
+    rows.push(...(data ?? []));
+  }
+  return rows;
+};
+
+export const isAggregate = (country: WorldBankCountry): boolean => country.region.id === 'NA' || country.region.value.trim() === 'Aggregates';
+
+export const fetchCountries = async (): Promise<WorldBankCountry[]> =>
+  (await fetchAllPages<WorldBankCountry>('country', {})).filter(c => !isAggregate(c));
+
+export const toRawObservations = (rows: readonly IndicatorRow[]): RawObservation[] =>
+  rows.flatMap(row => (row.value === null ? [] : [{ iso3: row.countryiso3code, year: Number(row.date), value: row.value }]));
+
+export const fetchIndicator = async (indicator: string, fromYear: number, toYear: number): Promise<RawObservation[]> =>
+  toRawObservations(await fetchAllPages<IndicatorRow>(`country/all/indicator/${encodeURIComponent(indicator)}`, { date: `${fromYear}:${toYear}` }));
+
+
+================================================================================
+FILE: scripts/update-data.ts
+================================================================================
+import { readFile, writeFile } from 'node:fs/promises';
+import { fileURLToPath } from 'node:url';
+import { METRICS } from '../src/metrics.ts';
+import type { Metric, MetricId } from '../src/types.ts';
+import { buildDataset, displayName, isoName, serialize, validateDataset, type CoverageRule, type SourceCountry } from './lib/dataset.ts';
+import { latestByCountry, type ObservationsByIso3, type RawObservation } from './lib/observations.ts';
+import { fetchChart } from './lib/owid.ts';
+import { fetchCountries, fetchIndicator } from './lib/world-bank.ts';
+
+const OUTPUT = fileURLToPath(new URL('../src/data/countries.json', import.meta.url));
+const LOOKBACK_YEARS = 20;
+const COVERAGE: CoverageRule = { required: ['population', 'area'], minCountries: 180, minPerMetric: 60 };
+
+const fetchMetric = (metric: Metric, fromYear: number, toYear: number): Promise<RawObservation[]> => {
+  const { source } = metric;
+  switch (source.kind) {
+    case 'worldBank':
+      return fetchIndicator(source.indicator, fromYear, toYear);
+    case 'owid':
+      return fetchChart(source.chart);
+  }
+};
+
+const loadCountries = async (): Promise<SourceCountry[]> =>
+  (await fetchCountries())
+    .filter(c => isoName(c.iso2Code) !== null)
+    .map(c => ({ iso2: c.iso2Code, iso3: c.id, name: displayName(c.iso2Code, c.name.trim()), region: c.region.value.trim() }));
+
+const loadObservations = async (fromYear: number, toYear: number): Promise<Map<MetricId, ObservationsByIso3>> => {
+  const observations = new Map<MetricId, ObservationsByIso3>();
+  for (const metric of METRICS) {
+    const latest = latestByCountry(await fetchMetric(metric, fromYear, toYear), fromYear);
+    console.log(`${metric.id.padEnd(20)} ${String(latest.size).padStart(4)} countries`);
+    observations.set(metric.id, latest);
+  }
+  return observations;
+};
+
+const readExisting = async (): Promise<string | null> => {
+  try {
+    return await readFile(OUTPUT, 'utf8');
+  } catch {
+    return null;
+  }
+};
+
+const main = async (): Promise<void> => {
+  const toYear = new Date().getUTCFullYear();
+  const fromYear = toYear - LOOKBACK_YEARS;
+  const [countries, observations] = await Promise.all([loadCountries(), loadObservations(fromYear, toYear)]);
+  const dataset = buildDataset(countries, METRICS, observations, COVERAGE.required);
+
+  const problems = validateDataset(dataset, METRICS, COVERAGE);
+  if (problems.length > 0) throw new Error(`Dataset failed validation:\n- ${problems.join('\n- ')}`);
+
+  const output = serialize(dataset);
+  if (output === (await readExisting())) {
+    console.log('Data unchanged.');
+    return;
+  }
+  await writeFile(OUTPUT, output, 'utf8');
+  console.log(`Wrote ${dataset.countries.length} countries to ${OUTPUT}`);
+};
+
+main().catch(error => {
+  console.error(error instanceof Error ? error.message : error);
+  process.exitCode = 1;
+});
+
+
+================================================================================
+FILE: src/data/countries.json
+================================================================================
+{
+  "countries": [
+    {
+      "iso2": "AF",
+      "name": "Afghanistan",
+      "region": "Asia",
+      "metrics": {
+        "population": {
+          "value": 42240000
+        },
+        "area": {
+          "value": 652230
+        },
+        "gdp": {
+          "value": 14580000000
+        },
+        "gdp_per_capita": {
+          "value": 345
+        },
+        "density": {
+          "value": 64.8
+        },
+        "literacy": {
+          "value": 37.3
+        },
+        "hdi": {
+          "value": 0.462
+        },
+        "life_expectancy": {
+          "value": 62
+        }
+      }
+    },
+    {
+      "iso2": "DZ",
+      "name": "Algeria",
+      "region": "Africa",
+      "metrics": {
+        "population": {
+          "value": 45400000
+        },
+        "area": {
+          "value": 2381741
+        },
+        "gdp": {
+          "value": 239900000000
+        },
+        "gdp_per_capita": {
+          "value": 5284
+        },
+        "gni_per_capita_ppp": {
+          "value": 13310
+        },
+        "density": {
+          "value": 19.1
+        },
+        "literacy": {
+          "value": 81.4
+        },
+        "hdi": {
+          "value": 0.745
+        },
+        "life_expectancy": {
+          "value": 76.4
+        }
+      }
+    },
+    {
+      "iso2": "AO",
+      "name": "Angola",
+      "region": "Africa",
+      "metrics": {
+        "population": {
+          "value": 36000000
+        },
+        "area": {
+          "value": 1246700
+        },
+        "gdp": {
+          "value": 92124000000
+        },
+        "gdp_per_capita": {
+          "value": 2560
+        },
+        "gni_per_capita_ppp": {
+          "value": 7250
+        },
+        "density": {
+          "value": 28.9
+        },
+        "literacy": {
+          "value": 72
+        },
+        "hdi": {
+          "value": 0.595
+        },
+        "life_expectancy": {
+          "value": 62
+        }
+      }
+    },
+    {
+      "iso2": "AR",
+      "name": "Argentina",
+      "region": "S. America",
+      "metrics": {
+        "population": {
+          "value": 46300000
+        },
+        "area": {
+          "value": 2780400
+        },
+        "gdp": {
+          "value": 641131000000
+        },
+        "gdp_per_capita": {
+          "value": 13846
+        },
+        "gni_per_capita_ppp": {
+          "value": 26390
+        },
+        "density": {
+          "value": 16.7
+        },
+        "literacy": {
+          "value": 99
+        },
+        "hdi": {
+          "value": 0.849
+        },
+        "life_expectancy": {
+          "value": 76.6
+        }
+      }
+    },
+    {
+      "iso2": "AU",
+      "name": "Australia",
+      "region": "Oceania",
+      "metrics": {
+        "population": {
+          "value": 26500000
+        },
+        "area": {
+          "value": 7692024
+        },
+        "gdp": {
+          "value": 1687713000000
+        },
+        "gdp_per_capita": {
+          "value": 63688
+        },
+        "gni_per_capita_ppp": {
+          "value": 59170
+        },
+        "density": {
+          "value": 3.4
+        },
+        "literacy": {
+          "value": 99
+        },
+        "hdi": {
+          "value": 0.946
+        },
+        "life_expectancy": {
+          "value": 84.5
+        }
+      }
+    },
+    {
+      "iso2": "AT",
+      "name": "Austria",
+      "region": "Europe",
+      "metrics": {
+        "population": {
+          "value": 9100000
+        },
+        "area": {
+          "value": 83879
+        },
+        "gdp": {
+          "value": 515768000000
+        },
+        "gdp_per_capita": {
+          "value": 56672
+        },
+        "gni_per_capita_ppp": {
+          "value": 66800
+        },
+        "density": {
+          "value": 108.5
+        },
+        "literacy": {
+          "value": 99
+        },
+        "hdi": {
+          "value": 0.926
+        },
+        "life_expectancy": {
+          "value": 82
+        }
+      }
+    },
+    {
+      "iso2": "BD",
+      "name": "Bangladesh",
+      "region": "Asia",
+      "metrics": {
+        "population": {
+          "value": 172000000
+        },
+        "area": {
+          "value": 147570
+        },
+        "gdp": {
+          "value": 460201000000
+        },
+        "gdp_per_capita": {
+          "value": 2676
+        },
+        "gni_per_capita_ppp": {
+          "value": 7040
+        },
+        "density": {
+          "value": 1166
+        },
+        "literacy": {
+          "value": 74.9
+        },
+        "hdi": {
+          "value": 0.67
+        },
+        "life_expectancy": {
+          "value": 72.4
+        }
+      }
+    },
+    {
+      "iso2": "BE",
+      "name": "Belgium",
+      "region": "Europe",
+      "metrics": {
+        "population": {
+          "value": 11700000
+        },
+        "area": {
+          "value": 30528
+        },
+        "gdp": {
+          "value": 609887000000
+        },
+        "gdp_per_capita": {
+          "value": 52133
+        },
+        "gni_per_capita_ppp": {
+          "value": 65430
+        },
+        "density": {
+          "value": 383.3
+        },
+        "literacy": {
+          "value": 99
+        },
+        "hdi": {
+          "value": 0.942
+        },
+        "life_expectancy": {
+          "value": 82.2
+        }
+      }
+    },
+    {
+      "iso2": "BJ",
+      "name": "Benin",
+      "region": "Africa",
+      "metrics": {
+        "population": {
+          "value": 13700000
+        },
+        "area": {
+          "value": 112622
+        },
+        "gdp": {
+          "value": 19234000000
+        },
+        "gdp_per_capita": {
+          "value": 1404
+        },
+        "gni_per_capita_ppp": {
+          "value": 4030
+        },
+        "density": {
+          "value": 121.7
+        },
+        "literacy": {
+          "value": 45.8
+        },
+        "hdi": {
+          "value": 0.504
+        },
+        "life_expectancy": {
+          "value": 60
+        }
+      }
+    },
+    {
+      "iso2": "BO",
+      "name": "Bolivia",
+      "region": "S. America",
+      "metrics": {
+        "population": {
+          "value": 12400000
+        },
+        "area": {
+          "value": 1098581
+        },
+        "gdp": {
+          "value": 44315000000
+        },
+        "gdp_per_capita": {
+          "value": 3574
+        },
+        "gni_per_capita_ppp": {
+          "value": 9540
+        },
+        "density": {
+          "value": 11.3
+        },
+        "literacy": {
+          "value": 94.5
+        },
+        "hdi": {
+          "value": 0.692
+        },
+        "life_expectancy": {
+          "value": 63.6
+        }
+      }
+    },
+    {
+      "iso2": "BW",
+      "name": "Botswana",
+      "region": "Africa",
+      "metrics": {
+        "population": {
+          "value": 2600000
+        },
+        "area": {
+          "value": 581730
+        },
+        "gdp": {
+          "value": 19396000000
+        },
+        "gdp_per_capita": {
+          "value": 7460
+        },
+        "gni_per_capita_ppp": {
+          "value": 18600
+        },
+        "density": {
+          "value": 4.5
+        },
+        "literacy": {
+          "value": 88.9
+        },
+        "hdi": {
+          "value": 0.708
+        },
+        "life_expectancy": {
+          "value": 61.1
+        }
+      }
+    },
+    {
+      "iso2": "BR",
+      "name": "Brazil",
+      "region": "S. America",
+      "metrics": {
+        "population": {
+          "value": 216400000
+        },
+        "area": {
+          "value": 8515767
+        },
+        "gdp": {
+          "value": 2173668000000
+        },
+        "gdp_per_capita": {
+          "value": 10047
+        },
+        "gni_per_capita_ppp": {
+          "value": 17000
+        },
+        "density": {
+          "value": 25.4
+        },
+        "literacy": {
+          "value": 93.5
+        },
+        "hdi": {
+          "value": 0.76
+        },
+        "life_expectancy": {
+          "value": 72.8
+        }
+      }
+    },
+    {
+      "iso2": "BF",
+      "name": "Burkina Faso",
+      "region": "Africa",
+      "metrics": {
+        "population": {
+          "value": 23000000
+        },
+        "area": {
+          "value": 274200
+        },
+        "gdp": {
+          "value": 20327000000
+        },
+        "gdp_per_capita": {
+          "value": 884
+        },
+        "gni_per_capita_ppp": {
+          "value": 2310
+        },
+        "density": {
+          "value": 83.9
+        },
+        "literacy": {
+          "value": 34.5
+        },
+        "hdi": {
+          "value": 0.438
+        },
+        "life_expectancy": {
+          "value": 59.3
+        }
+      }
+    },
+    {
+      "iso2": "CM",
+      "name": "Cameroon",
+      "region": "Africa",
+      "metrics": {
+        "population": {
+          "value": 28600000
+        },
+        "area": {
+          "value": 475442
+        },
+        "gdp": {
+          "value": 48455000000
+        },
+        "gdp_per_capita": {
+          "value": 1694
+        },
+        "gni_per_capita_ppp": {
+          "value": 4220
+        },
+        "density": {
+          "value": 60.2
+        },
+        "literacy": {
+          "value": 77.1
+        },
+        "hdi": {
+          "value": 0.587
+        },
+        "life_expectancy": {
+          "value": 61
+        }
+      }
+    },
+    {
+      "iso2": "CA",
+      "name": "Canada",
+      "region": "N. America",
+      "metrics": {
+        "population": {
+          "value": 40100000
+        },
+        "area": {
+          "value": 9984670
+        },
+        "gdp": {
+          "value": 2139840000000
+        },
+        "gdp_per_capita": {
+          "value": 53385
+        },
+        "gni_per_capita_ppp": {
+          "value": 58040
+        },
+        "density": {
+          "value": 4
+        },
+        "literacy": {
+          "value": 99
+        },
+        "hdi": {
+          "value": 0.935
+        },
+        "life_expectancy": {
+          "value": 82.7
+        }
+      }
+    },
+    {
+      "iso2": "CL",
+      "name": "Chile",
+      "region": "S. America",
+      "metrics": {
+        "population": {
+          "value": 19500000
+        },
+        "area": {
+          "value": 756102
+        },
+        "gdp": {
+          "value": 335533000000
+        },
+        "gdp_per_capita": {
+          "value": 17206
+        },
+        "gni_per_capita_ppp": {
+          "value": 28510
+        },
+        "density": {
+          "value": 25.8
+        },
+        "literacy": {
+          "value": 97
+        },
+        "hdi": {
+          "value": 0.86
+        },
+        "life_expectancy": {
+          "value": 78.9
+        }
+      }
+    },
+    {
+      "iso2": "CN",
+      "name": "China",
+      "region": "Asia",
+      "metrics": {
+        "population": {
+          "value": 1412000000
+        },
+        "area": {
+          "value": 9596960
+        },
+        "gdp": {
+          "value": 17963171000000
+        },
+        "gdp_per_capita": {
+          "value": 12720
+        },
+        "gni_per_capita_ppp": {
+          "value": 23310
+        },
+        "density": {
+          "value": 147
+        },
+        "literacy": {
+          "value": 97.5
+        },
+        "hdi": {
+          "value": 0.788
+        },
+        "life_expectancy": {
+          "value": 78.2
+        }
+      }
+    },
+    {
+      "iso2": "CO",
+      "name": "Colombia",
+      "region": "S. America",
+      "metrics": {
+        "population": {
+          "value": 52000000
+        },
+        "area": {
+          "value": 1138910
+        },
+        "gdp": {
+          "value": 363835000000
+        },
+        "gdp_per_capita": {
+          "value": 6997
+        },
+        "gni_per_capita_ppp": {
+          "value": 18180
+        },
+        "density": {
+          "value": 45.7
+        },
+        "literacy": {
+          "value": 95.6
+        },
+        "hdi": {
+          "value": 0.758
+        },
+        "life_expectancy": {
+          "value": 72.8
+        }
+      }
+    },
+    {
+      "iso2": "CR",
+      "name": "Costa Rica",
+      "region": "N. America",
+      "metrics": {
+        "population": {
+          "value": 5200000
+        },
+        "area": {
+          "value": 51100
+        },
+        "gdp": {
+          "value": 68379000000
+        },
+        "gdp_per_capita": {
+          "value": 13150
+        },
+        "gni_per_capita_ppp": {
+          "value": 24420
+        },
+        "density": {
+          "value": 101.8
+        },
+        "literacy": {
+          "value": 97.9
+        },
+        "hdi": {
+          "value": 0.806
+        },
+        "life_expectancy": {
+          "value": 77
+        }
+      }
+    },
+    {
+      "iso2": "CU",
+      "name": "Cuba",
+      "region": "N. America",
+      "metrics": {
+        "population": {
+          "value": 11100000
+        },
+        "area": {
+          "value": 109884
+        },
+        "gdp": {
+          "value": 107352000000
+        },
+        "gdp_per_capita": {
+          "value": 9671
+        },
+        "density": {
+          "value": 101
+        },
+        "literacy": {
+          "value": 99.8
+        },
+        "hdi": {
+          "value": 0.783
+        },
+        "life_expectancy": {
+          "value": 73.7
+        }
+      }
+    },
+    {
+      "iso2": "CZ",
+      "name": "Czech Republic",
+      "region": "Europe",
+      "metrics": {
+        "population": {
+          "value": 10500000
+        },
+        "area": {
+          "value": 78867
+        },
+        "gdp": {
+          "value": 330860000000
+        },
+        "gdp_per_capita": {
+          "value": 31510
+        },
+        "gni_per_capita_ppp": {
+          "value": 49100
+        },
+        "density": {
+          "value": 133.2
+        },
+        "literacy": {
+          "value": 99
+        },
+        "hdi": {
+          "value": 0.889
+        },
+        "life_expectancy": {
+          "value": 79.3
+        }
+      }
+    },
+    {
+      "iso2": "CD",
+      "name": "DR Congo",
+      "region": "Africa",
+      "metrics": {
+        "population": {
+          "value": 102300000
+        },
+        "area": {
+          "value": 2344858
+        },
+        "gdp": {
+          "value": 66380000000
+        },
+        "gdp_per_capita": {
+          "value": 649
+        },
+        "gni_per_capita_ppp": {
+          "value": 1430
+        },
+        "density": {
+          "value": 43.6
+        },
+        "literacy": {
+          "value": 80
+        },
+        "hdi": {
+          "value": 0.479
+        },
+        "life_expectancy": {
+          "value": 60.7
+        }
+      }
+    },
+    {
+      "iso2": "DK",
+      "name": "Denmark",
+      "region": "Europe",
+      "metrics": {
+        "population": {
+          "value": 5900000
+        },
+        "area": {
+          "value": 43094
+        },
+        "gdp": {
+          "value": 405626000000
+        },
+        "gdp_per_capita": {
+          "value": 68750
+        },
+        "gni_per_capita_ppp": {
+          "value": 72680
+        },
+        "density": {
+          "value": 137
+        },
+        "literacy": {
+          "value": 99
+        },
+        "hdi": {
+          "value": 0.952
+        },
+        "life_expectancy": {
+          "value": 81.4
+        }
+      }
+    },
+    {
+      "iso2": "DO",
+      "name": "Dominican Rep.",
+      "region": "N. America",
+      "metrics": {
+        "population": {
+          "value": 11300000
+        },
+        "area": {
+          "value": 48671
+        },
+        "gdp": {
+          "value": 113642000000
+        },
+        "gdp_per_capita": {
+          "value": 10057
+        },
+        "gni_per_capita_ppp": {
+          "value": 22760
+        },
+        "density": {
+          "value": 232.2
+        },
+        "literacy": {
+          "value": 95
+        },
+        "hdi": {
+          "value": 0.768
+        },
+        "life_expectancy": {
+          "value": 72.6
+        }
+      }
+    },
+    {
+      "iso2": "EC",
+      "name": "Ecuador",
+      "region": "S. America",
+      "metrics": {
+        "population": {
+          "value": 18000000
+        },
+        "area": {
+          "value": 283561
+        },
+        "gdp": {
+          "value": 118845000000
+        },
+        "gdp_per_capita": {
+          "value": 6603
+        },
+        "gni_per_capita_ppp": {
+          "value": 12930
+        },
+        "density": {
+          "value": 63.5
+        },
+        "literacy": {
+          "value": 94.5
+        },
+        "hdi": {
+          "value": 0.765
+        },
+        "life_expectancy": {
+          "value": 74.3
+        }
+      }
+    },
+    {
+      "iso2": "EG",
+      "name": "Egypt",
+      "region": "Africa",
+      "metrics": {
+        "population": {
+          "value": 105000000
+        },
+        "area": {
+          "value": 1001450
+        },
+        "gdp": {
+          "value": 387086000000
+        },
+        "gdp_per_capita": {
+          "value": 3686
+        },
+        "gni_per_capita_ppp": {
+          "value": 16450
+        },
+        "density": {
+          "value": 104.9
+        },
+        "literacy": {
+          "value": 73.1
+        },
+        "hdi": {
+          "value": 0.728
+        },
+        "life_expectancy": {
+          "value": 70.2
+        }
+      }
+    },
+    {
+      "iso2": "ET",
+      "name": "Ethiopia",
+      "region": "Africa",
+      "metrics": {
+        "population": {
+          "value": 126500000
+        },
+        "area": {
+          "value": 1104300
+        },
+        "gdp": {
+          "value": 163698000000
+        },
+        "gdp_per_capita": {
+          "value": 1294
+        },
+        "gni_per_capita_ppp": {
+          "value": 3070
+        },
+        "density": {
+          "value": 114.6
+        },
+        "literacy": {
+          "value": 51.8
+        },
+        "hdi": {
+          "value": 0.492
+        },
+        "life_expectancy": {
+          "value": 65
+        }
+      }
+    },
+    {
+      "iso2": "FJ",
+      "name": "Fiji",
+      "region": "Oceania",
+      "metrics": {
+        "population": {
+          "value": 930000
+        },
+        "area": {
+          "value": 18274
+        },
+        "gdp": {
+          "value": 5314000000
+        },
+        "gdp_per_capita": {
+          "value": 5714
+        },
+        "gni_per_capita_ppp": {
+          "value": 14570
+        },
+        "density": {
+          "value": 50.9
+        },
+        "literacy": {
+          "value": 99.1
+        },
+        "hdi": {
+          "value": 0.729
+        },
+        "life_expectancy": {
+          "value": 67.4
+        }
+      }
+    },
+    {
+      "iso2": "FI",
+      "name": "Finland",
+      "region": "Europe",
+      "metrics": {
+        "population": {
+          "value": 5550000
+        },
+        "area": {
+          "value": 338424
+        },
+        "gdp": {
+          "value": 300186000000
+        },
+        "gdp_per_capita": {
+          "value": 54090
+        },
+        "gni_per_capita_ppp": {
+          "value": 58580
+        },
+        "density": {
+          "value": 16.4
+        },
+        "literacy": {
+          "value": 99
+        },
+        "hdi": {
+          "value": 0.942
+        },
+        "life_expectancy": {
+          "value": 82
+        }
+      }
+    },
+    {
+      "iso2": "FR",
+      "name": "France",
+      "region": "Europe",
+      "metrics": {
+        "population": {
+          "value": 68000000
+        },
+        "area": {
+          "value": 643801
+        },
+        "gdp": {
+          "value": 2923489000000
+        },
+        "gdp_per_capita": {
+          "value": 43000
+        },
+        "gni_per_capita_ppp": {
+          "value": 55080
+        },
+        "density": {
+          "value": 105.6
+        },
+        "literacy": {
+          "value": 99
+        },
+        "hdi": {
+          "value": 0.903
+        },
+        "life_expectancy": {
+          "value": 82.5
+        }
+      }
+    },
+    {
+      "iso2": "DE",
+      "name": "Germany",
+      "region": "Europe",
+      "metrics": {
+        "population": {
+          "value": 84400000
+        },
+        "area": {
+          "value": 357022
+        },
+        "gdp": {
+          "value": 4308854000000
+        },
+        "gdp_per_capita": {
+          "value": 51072
+        },
+        "gni_per_capita_ppp": {
+          "value": 63150
+        },
+        "density": {
+          "value": 236.4
+        },
+        "literacy": {
+          "value": 99
+        },
+        "hdi": {
+          "value": 0.95
+        },
+        "life_expectancy": {
+          "value": 81.7
+        }
+      }
+    },
+    {
+      "iso2": "GH",
+      "name": "Ghana",
+      "region": "Africa",
+      "metrics": {
+        "population": {
+          "value": 34100000
+        },
+        "area": {
+          "value": 238533
+        },
+        "gdp": {
+          "value": 76370000000
+        },
+        "gdp_per_capita": {
+          "value": 2240
+        },
+        "gni_per_capita_ppp": {
+          "value": 5870
+        },
+        "density": {
+          "value": 143
+        },
+        "literacy": {
+          "value": 79
+        },
+        "hdi": {
+          "value": 0.602
+        },
+        "life_expectancy": {
+          "value": 63.8
+        }
+      }
+    },
+    {
+      "iso2": "GR",
+      "name": "Greece",
+      "region": "Europe",
+      "metrics": {
+        "population": {
+          "value": 10430000
+        },
+        "area": {
+          "value": 131957
+        },
+        "gdp": {
+          "value": 239300000000
+        },
+        "gdp_per_capita": {
+          "value": 22942
+        },
+        "gni_per_capita_ppp": {
+          "value": 38050
+        },
+        "density": {
+          "value": 79
+        },
+        "literacy": {
+          "value": 97.9
+        },
+        "hdi": {
+          "value": 0.887
+        },
+        "life_expectancy": {
+          "value": 80.1
+        }
+      }
+    },
+    {
+      "iso2": "GT",
+      "name": "Guatemala",
+      "region": "N. America",
+      "metrics": {
+        "population": {
+          "value": 17600000
+        },
+        "area": {
+          "value": 108889
+        },
+        "gdp": {
+          "value": 95003000000
+        },
+        "gdp_per_capita": {
+          "value": 5398
+        },
+        "gni_per_capita_ppp": {
+          "value": 10250
+        },
+        "density": {
+          "value": 161.7
+        },
+        "literacy": {
+          "value": 83.3
+        },
+        "hdi": {
+          "value": 0.627
+        },
+        "life_expectancy": {
+          "value": 69.2
+        }
+      }
+    },
+    {
+      "iso2": "HT",
+      "name": "Haiti",
+      "region": "N. America",
+      "metrics": {
+        "population": {
+          "value": 11700000
+        },
+        "area": {
+          "value": 27750
+        },
+        "gdp": {
+          "value": 21178000000
+        },
+        "gdp_per_capita": {
+          "value": 1810
+        },
+        "gni_per_capita_ppp": {
+          "value": 3110
+        },
+        "density": {
+          "value": 421.6
+        },
+        "literacy": {
+          "value": 61.7
+        },
+        "hdi": {
+          "value": 0.552
+        },
+        "life_expectancy": {
+          "value": 64
+        }
+      }
+    },
+    {
+      "iso2": "HN",
+      "name": "Honduras",
+      "region": "N. America",
+      "metrics": {
+        "population": {
+          "value": 10400000
+        },
+        "area": {
+          "value": 112492
+        },
+        "gdp": {
+          "value": 31717000000
+        },
+        "gdp_per_capita": {
+          "value": 3050
+        },
+        "gni_per_capita_ppp": {
+          "value": 6340
+        },
+        "density": {
+          "value": 92.5
+        },
+        "literacy": {
+          "value": 87.2
+        },
+        "hdi": {
+          "value": 0.624
+        },
+        "life_expectancy": {
+          "value": 70.1
+        }
+      }
+    },
+    {
+      "iso2": "HU",
+      "name": "Hungary",
+      "region": "Europe",
+      "metrics": {
+        "population": {
+          "value": 9600000
+        },
+        "area": {
+          "value": 93028
+        },
+        "gdp": {
+          "value": 212384000000
+        },
+        "gdp_per_capita": {
+          "value": 22122
+        },
+        "gni_per_capita_ppp": {
+          "value": 40680
+        },
+        "density": {
+          "value": 103.2
+        },
+        "literacy": {
+          "value": 99.4
+        },
+        "hdi": {
+          "value": 0.851
+        },
+        "life_expectancy": {
+          "value": 74.5
+        }
+      }
+    },
+    {
+      "iso2": "IN",
+      "name": "India",
+      "region": "Asia",
+      "metrics": {
+        "population": {
+          "value": 1428000000
+        },
+        "area": {
+          "value": 3287263
+        },
+        "gdp": {
+          "value": 3737000000000
+        },
+        "gdp_per_capita": {
+          "value": 2617
+        },
+        "gni_per_capita_ppp": {
+          "value": 8400
+        },
+        "density": {
+          "value": 434
+        },
+        "literacy": {
+          "value": 74.4
+        },
+        "hdi": {
+          "value": 0.644
+        },
+        "life_expectancy": {
+          "value": 67.2
+        }
+      }
+    },
+    {
+      "iso2": "ID",
+      "name": "Indonesia",
+      "region": "Asia",
+      "metrics": {
+        "population": {
+          "value": 277500000
+        },
+        "area": {
+          "value": 1904569
+        },
+        "gdp": {
+          "value": 1417387000000
+        },
+        "gdp_per_capita": {
+          "value": 5108
+        },
+        "gni_per_capita_ppp": {
+          "value": 15850
+        },
+        "density": {
+          "value": 145.7
+        },
+        "literacy": {
+          "value": 96
+        },
+        "hdi": {
+          "value": 0.713
+        },
+        "life_expectancy": {
+          "value": 67.6
+        }
+      }
+    },
+    {
+      "iso2": "IR",
+      "name": "Iran",
+      "region": "Asia",
+      "metrics": {
+        "population": {
+          "value": 89200000
+        },
+        "area": {
+          "value": 1648195
+        },
+        "gdp": {
+          "value": 388000000000
+        },
+        "gdp_per_capita": {
+          "value": 4351
+        },
+        "gni_per_capita_ppp": {
+          "value": 16750
+        },
+        "density": {
+          "value": 54.1
+        },
+        "literacy": {
+          "value": 88.7
+        },
+        "hdi": {
+          "value": 0.774
+        },
+        "life_expectancy": {
+          "value": 73.9
+        }
+      }
+    },
+    {
+      "iso2": "IQ",
+      "name": "Iraq",
+      "region": "Asia",
+      "metrics": {
+        "population": {
+          "value": 44500000
+        },
+        "area": {
+          "value": 438317
+        },
+        "gdp": {
+          "value": 267900000000
+        },
+        "gdp_per_capita": {
+          "value": 6021
+        },
+        "gni_per_capita_ppp": {
+          "value": 11510
+        },
+        "density": {
+          "value": 101.5
+        },
+        "literacy": {
+          "value": 85.6
+        },
+        "hdi": {
+          "value": 0.686
+        },
+        "life_expectancy": {
+          "value": 70.4
+        }
+      }
+    },
+    {
+      "iso2": "IE",
+      "name": "Ireland",
+      "region": "Europe",
+      "metrics": {
+        "population": {
+          "value": 5200000
+        },
+        "area": {
+          "value": 70273
+        },
+        "gdp": {
+          "value": 594095000000
+        },
+        "gdp_per_capita": {
+          "value": 114249
+        },
+        "gni_per_capita_ppp": {
+          "value": 87260
+        },
+        "density": {
+          "value": 74
+        },
+        "literacy": {
+          "value": 99
+        },
+        "hdi": {
+          "value": 0.95
+        },
+        "life_expectancy": {
+          "value": 82
+        }
+      }
+    },
+    {
+      "iso2": "IL",
+      "name": "Israel",
+      "region": "Asia",
+      "metrics": {
+        "population": {
+          "value": 9750000
+        },
+        "area": {
+          "value": 20770
+        },
+        "gdp": {
+          "value": 525000000000
+        },
+        "gdp_per_capita": {
+          "value": 53853
+        },
+        "gni_per_capita_ppp": {
+          "value": 47580
+        },
+        "density": {
+          "value": 470
+        },
+        "literacy": {
+          "value": 97.8
+        },
+        "hdi": {
+          "value": 0.915
+        },
+        "life_expectancy": {
+          "value": 82.6
+        }
+      }
+    },
+    {
+      "iso2": "IT",
+      "name": "Italy",
+      "region": "Europe",
+      "metrics": {
+        "population": {
+          "value": 58900000
+        },
+        "area": {
+          "value": 301340
+        },
+        "gdp": {
+          "value": 2169745000000
+        },
+        "gdp_per_capita": {
+          "value": 36834
+        },
+        "gni_per_capita_ppp": {
+          "value": 52710
+        },
+        "density": {
+          "value": 195.4
+        },
+        "literacy": {
+          "value": 99.4
+        },
+        "hdi": {
+          "value": 0.906
+        },
+        "life_expectancy": {
+          "value": 83.5
+        }
+      }
+    },
+    {
+      "iso2": "JM",
+      "name": "Jamaica",
+      "region": "N. America",
+      "metrics": {
+        "population": {
+          "value": 2800000
+        },
+        "area": {
+          "value": 10991
+        },
+        "gdp": {
+          "value": 17099000000
+        },
+        "gdp_per_capita": {
+          "value": 6107
+        },
+        "gni_per_capita_ppp": {
+          "value": 11290
+        },
+        "density": {
+          "value": 254.8
+        },
+        "literacy": {
+          "value": 88.7
+        },
+        "hdi": {
+          "value": 0.709
+        },
+        "life_expectancy": {
+          "value": 70.5
+        }
+      }
+    },
+    {
+      "iso2": "JP",
+      "name": "Japan",
+      "region": "Asia",
+      "metrics": {
+        "population": {
+          "value": 124500000
+        },
+        "area": {
+          "value": 377975
+        },
+        "gdp": {
+          "value": 4230862000000
+        },
+        "gdp_per_capita": {
+          "value": 33960
+        },
+        "gni_per_capita_ppp": {
+          "value": 49240
+        },
+        "density": {
+          "value": 329.6
+        },
+        "literacy": {
+          "value": 99
+        },
+        "hdi": {
+          "value": 0.92
+        },
+        "life_expectancy": {
+          "value": 84.8
+        }
+      }
+    },
+    {
+      "iso2": "KE",
+      "name": "Kenya",
+      "region": "Africa",
+      "metrics": {
+        "population": {
+          "value": 55100000
+        },
+        "area": {
+          "value": 580367
+        },
+        "gdp": {
+          "value": 113420000000
+        },
+        "gdp_per_capita": {
+          "value": 2058
+        },
+        "gni_per_capita_ppp": {
+          "value": 5720
+        },
+        "density": {
+          "value": 95
+        },
+        "literacy": {
+          "value": 82.6
+        },
+        "hdi": {
+          "value": 0.575
+        },
+        "life_expectancy": {
+          "value": 61.4
+        }
+      }
+    },
+    {
+      "iso2": "MY",
+      "name": "Malaysia",
+      "region": "Asia",
+      "metrics": {
+        "population": {
+          "value": 34300000
+        },
+        "area": {
+          "value": 330803
+        },
+        "gdp": {
+          "value": 430895000000
+        },
+        "gdp_per_capita": {
+          "value": 12563
+        },
+        "gni_per_capita_ppp": {
+          "value": 33550
+        },
+        "density": {
+          "value": 103.7
+        },
+        "literacy": {
+          "value": 95.9
+        },
+        "hdi": {
+          "value": 0.807
+        },
+        "life_expectancy": {
+          "value": 74.9
+        }
+      }
+    },
+    {
+      "iso2": "MX",
+      "name": "Mexico",
+      "region": "N. America",
+      "metrics": {
+        "population": {
+          "value": 128900000
+        },
+        "area": {
+          "value": 1964375
+        },
+        "gdp": {
+          "value": 1811468000000
+        },
+        "gdp_per_capita": {
+          "value": 14056
+        },
+        "gni_per_capita_ppp": {
+          "value": 22410
+        },
+        "density": {
+          "value": 65.6
+        },
+        "literacy": {
+          "value": 95.4
+        },
+        "hdi": {
+          "value": 0.781
+        },
+        "life_expectancy": {
+          "value": 75
+        }
+      }
+    },
+    {
+      "iso2": "MA",
+      "name": "Morocco",
+      "region": "Africa",
+      "metrics": {
+        "population": {
+          "value": 37500000
+        },
+        "area": {
+          "value": 446550
+        },
+        "gdp": {
+          "value": 141109000000
+        },
+        "gdp_per_capita": {
+          "value": 3764
+        },
+        "gni_per_capita_ppp": {
+          "value": 9140
+        },
+        "density": {
+          "value": 84
+        },
+        "literacy": {
+          "value": 75.9
+        },
+        "hdi": {
+          "value": 0.698
+        },
+        "life_expectancy": {
+          "value": 74
+        }
+      }
+    },
+    {
+      "iso2": "NL",
+      "name": "Netherlands",
+      "region": "Europe",
+      "metrics": {
+        "population": {
+          "value": 17800000
+        },
+        "area": {
+          "value": 41543
+        },
+        "gdp": {
+          "value": 1009000000000
+        },
+        "gdp_per_capita": {
+          "value": 56693
+        },
+        "gni_per_capita_ppp": {
+          "value": 70930
+        },
+        "density": {
+          "value": 428.5
+        },
+        "literacy": {
+          "value": 99
+        },
+        "hdi": {
+          "value": 0.946
+        },
+        "life_expectancy": {
+          "value": 82.4
+        }
+      }
+    },
+    {
+      "iso2": "NZ",
+      "name": "New Zealand",
+      "region": "Oceania",
+      "metrics": {
+        "population": {
+          "value": 5200000
+        },
+        "area": {
+          "value": 270467
+        },
+        "gdp": {
+          "value": 251969000000
+        },
+        "gdp_per_capita": {
+          "value": 48455
+        },
+        "gni_per_capita_ppp": {
+          "value": 52000
+        },
+        "density": {
+          "value": 19.2
+        },
+        "literacy": {
+          "value": 99
+        },
+        "hdi": {
+          "value": 0.939
+        },
+        "life_expectancy": {
+          "value": 82.5
+        }
+      }
+    },
+    {
+      "iso2": "NI",
+      "name": "Nicaragua",
+      "region": "N. America",
+      "metrics": {
+        "population": {
+          "value": 7050000
+        },
+        "area": {
+          "value": 130373
+        },
+        "gdp": {
+          "value": 15787000000
+        },
+        "gdp_per_capita": {
+          "value": 2239
+        },
+        "gni_per_capita_ppp": {
+          "value": 6220
+        },
+        "density": {
+          "value": 54.1
+        },
+        "literacy": {
+          "value": 82.6
+        },
+        "hdi": {
+          "value": 0.667
+        },
+        "life_expectancy": {
+          "value": 74.5
+        }
+      }
+    },
+    {
+      "iso2": "NG",
+      "name": "Nigeria",
+      "region": "Africa",
+      "metrics": {
+        "population": {
+          "value": 223800000
+        },
+        "area": {
+          "value": 923768
+        },
+        "gdp": {
+          "value": 472620000000
+        },
+        "gdp_per_capita": {
+          "value": 2112
+        },
+        "gni_per_capita_ppp": {
+          "value": 5860
+        },
+        "density": {
+          "value": 242.3
+        },
+        "literacy": {
+          "value": 62
+        },
+        "hdi": {
+          "value": 0.548
+        },
+        "life_expectancy": {
+          "value": 52.7
+        }
+      }
+    },
+    {
+      "iso2": "NO",
+      "name": "Norway",
+      "region": "Europe",
+      "metrics": {
+        "population": {
+          "value": 5500000
+        },
+        "area": {
+          "value": 323802
+        },
+        "gdp": {
+          "value": 546768000000
+        },
+        "gdp_per_capita": {
+          "value": 99412
+        },
+        "gni_per_capita_ppp": {
+          "value": 89100
+        },
+        "density": {
+          "value": 17
+        },
+        "literacy": {
+          "value": 99
+        },
+        "hdi": {
+          "value": 0.966
+        },
+        "life_expectancy": {
+          "value": 83.2
+        }
+      }
+    },
+    {
+      "iso2": "PK",
+      "name": "Pakistan",
+      "region": "Asia",
+      "metrics": {
+        "population": {
+          "value": 240500000
+        },
+        "area": {
+          "value": 881912
+        },
+        "gdp": {
+          "value": 376493000000
+        },
+        "gdp_per_capita": {
+          "value": 1565
+        },
+        "gni_per_capita_ppp": {
+          "value": 6530
+        },
+        "density": {
+          "value": 272.8
+        },
+        "literacy": {
+          "value": 58
+        },
+        "hdi": {
+          "value": 0.544
+        },
+        "life_expectancy": {
+          "value": 66.1
+        }
+      }
+    },
+    {
+      "iso2": "PA",
+      "name": "Panama",
+      "region": "N. America",
+      "metrics": {
+        "population": {
+          "value": 4400000
+        },
+        "area": {
+          "value": 75420
+        },
+        "gdp": {
+          "value": 76523000000
+        },
+        "gdp_per_capita": {
+          "value": 17391
+        },
+        "gni_per_capita_ppp": {
+          "value": 32980
+        },
+        "density": {
+          "value": 58.3
+        },
+        "literacy": {
+          "value": 95.7
+        },
+        "hdi": {
+          "value": 0.82
+        },
+        "life_expectancy": {
+          "value": 76.2
+        }
+      }
+    },
+    {
+      "iso2": "PG",
+      "name": "Papua New Guinea",
+      "region": "Oceania",
+      "metrics": {
+        "population": {
+          "value": 10300000
+        },
+        "area": {
+          "value": 462840
+        },
+        "gdp": {
+          "value": 30624000000
+        },
+        "gdp_per_capita": {
+          "value": 2973
+        },
+        "gni_per_capita_ppp": {
+          "value": 4620
+        },
+        "density": {
+          "value": 22.3
+        },
+        "literacy": {
+          "value": 64.2
+        },
+        "hdi": {
+          "value": 0.558
+        },
+        "life_expectancy": {
+          "value": 64.5
+        }
+      }
+    },
+    {
+      "iso2": "PY",
+      "name": "Paraguay",
+      "region": "S. America",
+      "metrics": {
+        "population": {
+          "value": 6800000
+        },
+        "area": {
+          "value": 406752
+        },
+        "gdp": {
+          "value": 42956000000
+        },
+        "gdp_per_capita": {
+          "value": 6317
+        },
+        "gni_per_capita_ppp": {
+          "value": 15030
+        },
+        "density": {
+          "value": 16.7
+        },
+        "literacy": {
+          "value": 94.7
+        },
+        "hdi": {
+          "value": 0.717
+        },
+        "life_expectancy": {
+          "value": 70.3
+        }
+      }
+    },
+    {
+      "iso2": "PE",
+      "name": "Peru",
+      "region": "S. America",
+      "metrics": {
+        "population": {
+          "value": 34000000
+        },
+        "area": {
+          "value": 1285216
+        },
+        "gdp": {
+          "value": 267603000000
+        },
+        "gdp_per_capita": {
+          "value": 7869
+        },
+        "gni_per_capita_ppp": {
+          "value": 15310
+        },
+        "density": {
+          "value": 26.4
+        },
+        "literacy": {
+          "value": 94.5
+        },
+        "hdi": {
+          "value": 0.762
+        },
+        "life_expectancy": {
+          "value": 73.7
+        }
+      }
+    },
+    {
+      "iso2": "PH",
+      "name": "Philippines",
+      "region": "Asia",
+      "metrics": {
+        "population": {
+          "value": 117300000
+        },
+        "area": {
+          "value": 300000
+        },
+        "gdp": {
+          "value": 435667000000
+        },
+        "gdp_per_capita": {
+          "value": 3715
+        },
+        "gni_per_capita_ppp": {
+          "value": 10590
+        },
+        "density": {
+          "value": 391
+        },
+        "literacy": {
+          "value": 96.3
+        },
+        "hdi": {
+          "value": 0.71
+        },
+        "life_expectancy": {
+          "value": 69.3
+        }
+      }
+    },
+    {
+      "iso2": "PL",
+      "name": "Poland",
+      "region": "Europe",
+      "metrics": {
+        "population": {
+          "value": 37600000
+        },
+        "area": {
+          "value": 312679
+        },
+        "gdp": {
+          "value": 811229000000
+        },
+        "gdp_per_capita": {
+          "value": 21574
+        },
+        "gni_per_capita_ppp": {
+          "value": 41370
+        },
+        "density": {
+          "value": 120.2
+        },
+        "literacy": {
+          "value": 99.8
+        },
+        "hdi": {
+          "value": 0.881
+        },
+        "life_expectancy": {
+          "value": 76.5
+        }
+      }
+    },
+    {
+      "iso2": "PT",
+      "name": "Portugal",
+      "region": "Europe",
+      "metrics": {
+        "population": {
+          "value": 10400000
+        },
+        "area": {
+          "value": 92212
+        },
+        "gdp": {
+          "value": 287080000000
+        },
+        "gdp_per_capita": {
+          "value": 27600
+        },
+        "gni_per_capita_ppp": {
+          "value": 40920
+        },
+        "density": {
+          "value": 112.8
+        },
+        "literacy": {
+          "value": 96.1
+        },
+        "hdi": {
+          "value": 0.874
+        },
+        "life_expectancy": {
+          "value": 81
+        }
+      }
+    },
+    {
+      "iso2": "RO",
+      "name": "Romania",
+      "region": "Europe",
+      "metrics": {
+        "population": {
+          "value": 19000000
+        },
+        "area": {
+          "value": 238391
+        },
+        "gdp": {
+          "value": 348902000000
+        },
+        "gdp_per_capita": {
+          "value": 18367
+        },
+        "gni_per_capita_ppp": {
+          "value": 40320
+        },
+        "density": {
+          "value": 79.7
+        },
+        "literacy": {
+          "value": 99.1
+        },
+        "hdi": {
+          "value": 0.827
+        },
+        "life_expectancy": {
+          "value": 74.2
+        }
+      }
+    },
+    {
+      "iso2": "RU",
+      "name": "Russia",
+      "region": "Europe",
+      "metrics": {
+        "population": {
+          "value": 143400000
+        },
+        "area": {
+          "value": 17098242
+        },
+        "gdp": {
+          "value": 2240400000000
+        },
+        "gdp_per_capita": {
+          "value": 15624
+        },
+        "gni_per_capita_ppp": {
+          "value": 36010
+        },
+        "density": {
+          "value": 8.4
+        },
+        "literacy": {
+          "value": 99.7
+        },
+        "hdi": {
+          "value": 0.821
+        },
+        "life_expectancy": {
+          "value": 69.4
+        }
+      }
+    },
+    {
+      "iso2": "SA",
+      "name": "Saudi Arabia",
+      "region": "Asia",
+      "metrics": {
+        "population": {
+          "value": 36400000
+        },
+        "area": {
+          "value": 2149690
+        },
+        "gdp": {
+          "value": 1069437000000
+        },
+        "gdp_per_capita": {
+          "value": 29386
+        },
+        "gni_per_capita_ppp": {
+          "value": 56920
+        },
+        "density": {
+          "value": 16.9
+        },
+        "literacy": {
+          "value": 97.6
+        },
+        "hdi": {
+          "value": 0.875
+        },
+        "life_expectancy": {
+          "value": 76.9
+        }
+      }
+    },
+    {
+      "iso2": "SG",
+      "name": "Singapore",
+      "region": "Asia",
+      "metrics": {
+        "population": {
+          "value": 5920000
+        },
+        "area": {
+          "value": 733
+        },
+        "gdp": {
+          "value": 515548000000
+        },
+        "gdp_per_capita": {
+          "value": 87088
+        },
+        "gni_per_capita_ppp": {
+          "value": 116500
+        },
+        "density": {
+          "value": 8075
+        },
+        "literacy": {
+          "value": 97.5
+        },
+        "hdi": {
+          "value": 0.949
+        },
+        "life_expectancy": {
+          "value": 84.1
+        }
+      }
+    },
+    {
+      "iso2": "ZA",
+      "name": "South Africa",
+      "region": "Africa",
+      "metrics": {
+        "population": {
+          "value": 60400000
+        },
+        "area": {
+          "value": 1221037
+        },
+        "gdp": {
+          "value": 399015000000
+        },
+        "gdp_per_capita": {
+          "value": 6607
+        },
+        "gni_per_capita_ppp": {
+          "value": 16090
+        },
+        "density": {
+          "value": 49.5
+        },
+        "literacy": {
+          "value": 95
+        },
+        "hdi": {
+          "value": 0.713
+        },
+        "life_expectancy": {
+          "value": 62.3
+        }
+      }
+    },
+    {
+      "iso2": "KR",
+      "name": "South Korea",
+      "region": "Asia",
+      "metrics": {
+        "population": {
+          "value": 51780000
+        },
+        "area": {
+          "value": 100210
+        },
+        "gdp": {
+          "value": 1721909000000
+        },
+        "gdp_per_capita": {
+          "value": 33268
+        },
+        "gni_per_capita_ppp": {
+          "value": 52990
+        },
+        "density": {
+          "value": 517
+        },
+        "literacy": {
+          "value": 99
+        },
+        "hdi": {
+          "value": 0.929
+        },
+        "life_expectancy": {
+          "value": 83.7
+        }
+      }
+    },
+    {
+      "iso2": "ES",
+      "name": "Spain",
+      "region": "Europe",
+      "metrics": {
+        "population": {
+          "value": 47420000
+        },
+        "area": {
+          "value": 505990
+        },
+        "gdp": {
+          "value": 1580694000000
+        },
+        "gdp_per_capita": {
+          "value": 33331
+        },
+        "gni_per_capita_ppp": {
+          "value": 48540
+        },
+        "density": {
+          "value": 93.7
+        },
+        "literacy": {
+          "value": 98.6
+        },
+        "hdi": {
+          "value": 0.911
+        },
+        "life_expectancy": {
+          "value": 83.3
+        }
+      }
+    },
+    {
+      "iso2": "SE",
+      "name": "Sweden",
+      "region": "Europe",
+      "metrics": {
+        "population": {
+          "value": 10500000
+        },
+        "area": {
+          "value": 450295
+        },
+        "gdp": {
+          "value": 593268000000
+        },
+        "gdp_per_capita": {
+          "value": 56502
+        },
+        "gni_per_capita_ppp": {
+          "value": 62640
+        },
+        "density": {
+          "value": 23.3
+        },
+        "literacy": {
+          "value": 99
+        },
+        "hdi": {
+          "value": 0.952
+        },
+        "life_expectancy": {
+          "value": 83
+        }
+      }
+    },
+    {
+      "iso2": "CH",
+      "name": "Switzerland",
+      "region": "Europe",
+      "metrics": {
+        "population": {
+          "value": 8800000
+        },
+        "area": {
+          "value": 41291
+        },
+        "gdp": {
+          "value": 869601000000
+        },
+        "gdp_per_capita": {
+          "value": 98839
+        },
+        "gni_per_capita_ppp": {
+          "value": 82340
+        },
+        "density": {
+          "value": 213.1
+        },
+        "literacy": {
+          "value": 99
+        },
+        "hdi": {
+          "value": 0.967
+        },
+        "life_expectancy": {
+          "value": 84
+        }
+      }
+    },
+    {
+      "iso2": "TZ",
+      "name": "Tanzania",
+      "region": "Africa",
+      "metrics": {
+        "population": {
+          "value": 65500000
+        },
+        "area": {
+          "value": 947300
+        },
+        "gdp": {
+          "value": 79162000000
+        },
+        "gdp_per_capita": {
+          "value": 1209
+        },
+        "gni_per_capita_ppp": {
+          "value": 2980
+        },
+        "density": {
+          "value": 69.2
+        },
+        "literacy": {
+          "value": 78.1
+        },
+        "hdi": {
+          "value": 0.532
+        },
+        "life_expectancy": {
+          "value": 66.2
+        }
+      }
+    },
+    {
+      "iso2": "TH",
+      "name": "Thailand",
+      "region": "Asia",
+      "metrics": {
+        "population": {
+          "value": 71800000
+        },
+        "area": {
+          "value": 513120
+        },
+        "gdp": {
+          "value": 514945000000
+        },
+        "gdp_per_capita": {
+          "value": 7172
+        },
+        "gni_per_capita_ppp": {
+          "value": 21220
+        },
+        "density": {
+          "value": 140
+        },
+        "literacy": {
+          "value": 94.1
+        },
+        "hdi": {
+          "value": 0.803
+        },
+        "life_expectancy": {
+          "value": 79.3
+        }
+      }
+    },
+    {
+      "iso2": "TN",
+      "name": "Tunisia",
+      "region": "Africa",
+      "metrics": {
+        "population": {
+          "value": 12400000
+        },
+        "area": {
+          "value": 163610
+        },
+        "gdp": {
+          "value": 46840000000
+        },
+        "gdp_per_capita": {
+          "value": 3778
+        },
+        "gni_per_capita_ppp": {
+          "value": 13130
+        },
+        "density": {
+          "value": 75.8
+        },
+        "literacy": {
+          "value": 79.7
+        },
+        "hdi": {
+          "value": 0.732
+        },
+        "life_expectancy": {
+          "value": 73.8
+        }
+      }
+    },
+    {
+      "iso2": "TR",
+      "name": "Turkey",
+      "region": "Asia",
+      "metrics": {
+        "population": {
+          "value": 85800000
+        },
+        "area": {
+          "value": 783562
+        },
+        "gdp": {
+          "value": 1029303000000
+        },
+        "gdp_per_capita": {
+          "value": 12001
+        },
+        "gni_per_capita_ppp": {
+          "value": 38170
+        },
+        "density": {
+          "value": 109.4
+        },
+        "literacy": {
+          "value": 96.7
+        },
+        "hdi": {
+          "value": 0.838
+        },
+        "life_expectancy": {
+          "value": 76
+        }
+      }
+    },
+    {
+      "iso2": "AE",
+      "name": "UAE",
+      "region": "Asia",
+      "metrics": {
+        "population": {
+          "value": 9440000
+        },
+        "area": {
+          "value": 83600
+        },
+        "gdp": {
+          "value": 507532000000
+        },
+        "gdp_per_capita": {
+          "value": 53757
+        },
+        "gni_per_capita_ppp": {
+          "value": 96850
+        },
+        "density": {
+          "value": 112.9
+        },
+        "literacy": {
+          "value": 98
+        },
+        "hdi": {
+          "value": 0.937
+        },
+        "life_expectancy": {
+          "value": 78.7
+        }
+      }
+    },
+    {
+      "iso2": "US",
+      "name": "USA",
+      "region": "N. America",
+      "metrics": {
+        "population": {
+          "value": 335000000
+        },
+        "area": {
+          "value": 9833517
+        },
+        "gdp": {
+          "value": 27360935000000
+        },
+        "gdp_per_capita": {
+          "value": 81695
+        },
+        "gni_per_capita_ppp": {
+          "value": 80300
+        },
+        "density": {
+          "value": 34.1
+        },
+        "literacy": {
+          "value": 99
+        },
+        "hdi": {
+          "value": 0.927
+        },
+        "life_expectancy": {
+          "value": 77.5
+        }
+      }
+    },
+    {
+      "iso2": "UG",
+      "name": "Uganda",
+      "region": "Africa",
+      "metrics": {
+        "population": {
+          "value": 48600000
+        },
+        "area": {
+          "value": 241038
+        },
+        "gdp": {
+          "value": 45561000000
+        },
+        "gdp_per_capita": {
+          "value": 937
+        },
+        "gni_per_capita_ppp": {
+          "value": 2660
+        },
+        "density": {
+          "value": 201.6
+        },
+        "literacy": {
+          "value": 79
+        },
+        "hdi": {
+          "value": 0.525
+        },
+        "life_expectancy": {
+          "value": 62.7
+        }
+      }
+    },
+    {
+      "iso2": "UA",
+      "name": "Ukraine",
+      "region": "Europe",
+      "metrics": {
+        "population": {
+          "value": 37000000
+        },
+        "area": {
+          "value": 603550
+        },
+        "gdp": {
+          "value": 160500000000
+        },
+        "gdp_per_capita": {
+          "value": 4339
+        },
+        "gni_per_capita_ppp": {
+          "value": 14720
+        },
+        "density": {
+          "value": 61.3
+        },
+        "literacy": {
+          "value": 99.8
+        },
+        "hdi": {
+          "value": 0.773
+        },
+        "life_expectancy": {
+          "value": 69
+        }
+      }
+    },
+    {
+      "iso2": "GB",
+      "name": "United Kingdom",
+      "region": "Europe",
+      "metrics": {
+        "population": {
+          "value": 67500000
+        },
+        "area": {
+          "value": 242495
+        },
+        "gdp": {
+          "value": 3332059000000
+        },
+        "gdp_per_capita": {
+          "value": 49384
+        },
+        "gni_per_capita_ppp": {
+          "value": 54600
+        },
+        "density": {
+          "value": 278.4
+        },
+        "literacy": {
+          "value": 99
+        },
+        "hdi": {
+          "value": 0.94
+        },
+        "life_expectancy": {
+          "value": 80.7
+        }
+      }
+    },
+    {
+      "iso2": "UY",
+      "name": "Uruguay",
+      "region": "S. America",
+      "metrics": {
+        "population": {
+          "value": 3400000
+        },
+        "area": {
+          "value": 176215
+        },
+        "gdp": {
+          "value": 77241000000
+        },
+        "gdp_per_capita": {
+          "value": 22718
+        },
+        "gni_per_capita_ppp": {
+          "value": 28200
+        },
+        "density": {
+          "value": 19.3
+        },
+        "literacy": {
+          "value": 98.8
+        },
+        "hdi": {
+          "value": 0.83
+        },
+        "life_expectancy": {
+          "value": 77.7
+        }
+      }
+    },
+    {
+      "iso2": "VE",
+      "name": "Venezuela",
+      "region": "S. America",
+      "metrics": {
+        "population": {
+          "value": 28400000
+        },
+        "area": {
+          "value": 916445
+        },
+        "gdp": {
+          "value": 92200000000
+        },
+        "gdp_per_capita": {
+          "value": 3246
+        },
+        "density": {
+          "value": 31
+        },
+        "literacy": {
+          "value": 97.1
+        },
+        "hdi": {
+          "value": 0.691
+        },
+        "life_expectancy": {
+          "value": 72.1
+        }
+      }
+    },
+    {
+      "iso2": "VN",
+      "name": "Vietnam",
+      "region": "Asia",
+      "metrics": {
+        "population": {
+          "value": 99500000
+        },
+        "area": {
+          "value": 331212
+        },
+        "gdp": {
+          "value": 449900000000
+        },
+        "gdp_per_capita": {
+          "value": 4522
+        },
+        "gni_per_capita_ppp": {
+          "value": 13860
+        },
+        "density": {
+          "value": 300.4
+        },
+        "literacy": {
+          "value": 95.8
+        },
+        "hdi": {
+          "value": 0.726
+        },
+        "life_expectancy": {
+          "value": 73.6
+        }
+      }
+    }
+  ]
+}
+
+
+================================================================================
+FILE: src/feedback.ts
+================================================================================
+export type Cue = 'tap' | 'correct' | 'wrong';
+
+interface Tone {
+  readonly frequency: number;
+  readonly start: number;
+  readonly duration: number;
+  readonly wave: OscillatorType;
+}
+
+const TONES: Record<Cue, readonly Tone[]> = {
+  tap: [{ frequency: 660, start: 0, duration: 0.04, wave: 'triangle' }],
+  correct: [
+    { frequency: 660, start: 0, duration: 0.09, wave: 'sine' },
+    { frequency: 990, start: 0.09, duration: 0.16, wave: 'sine' }
+  ],
+  wrong: [
+    { frequency: 220, start: 0, duration: 0.12, wave: 'square' },
+    { frequency: 165, start: 0.12, duration: 0.2, wave: 'square' }
+  ]
+};
+
+const VIBRATIONS: Record<Cue, VibratePattern> = {
+  tap: 12,
+  correct: [25, 50, 25],
+  wrong: [80, 60, 80]
+};
+
+const PEAK_GAIN = 0.08;
+
+export class Feedback {
+  #context: AudioContext | null = null;
+  enabled: boolean;
+
+  constructor(enabled: boolean) {
+    this.enabled = enabled;
+  }
+
+  play(cue: Cue): void {
+    if (!this.enabled) return;
+    this.#vibrate(cue);
+    this.#sound(cue);
+  }
+
+  #vibrate(cue: Cue): void {
+    if ('vibrate' in navigator) navigator.vibrate(VIBRATIONS[cue]);
+  }
+
+  #sound(cue: Cue): void {
+    const context = this.#audio();
+    if (!context) return;
+    const now = context.currentTime;
+    for (const tone of TONES[cue]) {
+      const oscillator = context.createOscillator();
+      const gain = context.createGain();
+      const begin = now + tone.start;
+      const end = begin + tone.duration;
+      oscillator.type = tone.wave;
+      oscillator.frequency.setValueAtTime(tone.frequency, begin);
+      gain.gain.setValueAtTime(0.0001, begin);
+      gain.gain.exponentialRampToValueAtTime(PEAK_GAIN, begin + 0.01);
+      gain.gain.exponentialRampToValueAtTime(0.0001, end);
+      oscillator.connect(gain).connect(context.destination);
+      oscillator.start(begin);
+      oscillator.stop(end + 0.02);
+    }
+  }
+
+  #audio(): AudioContext | null {
+    if (typeof AudioContext === 'undefined') return null;
+    this.#context ??= new AudioContext();
+    if (this.#context.state === 'suspended') void this.#context.resume();
+    return this.#context;
+  }
+}
+
+
+================================================================================
+FILE: src/metrics.ts
+================================================================================
+import type { Metric, MetricId } from './types.ts';
+
+const number = (digits: number) =>
+  new Intl.NumberFormat(undefined, { minimumFractionDigits: digits, maximumFractionDigits: digits });
+const usd = (options: Intl.NumberFormatOptions) =>
+  new Intl.NumberFormat(undefined, { style: 'currency', currency: 'USD', ...options });
+
+const integer = number(0);
+const oneDecimal = number(1);
+const twoDecimals = number(2);
+const threeDecimals = number(3);
+const usdCompact = usd({ notation: 'compact', maximumFractionDigits: 2 });
+const usdWhole = usd({ maximumFractionDigits: 0 });
+
+const worldBank = (indicator: string) => ({ kind: 'worldBank', indicator }) as const;
+const percent = (v: number) => `${oneDecimal.format(v)}%`;
+
+export const METRICS: readonly Metric[] = [
+  {
+    id: 'population', label: 'Population', question: 'Which country has a larger population?',
+    precision: 0, source: worldBank('SP.POP.TOTL'), format: v => integer.format(v)
+  },
+  {
+    id: 'area', label: 'Area', question: 'Which country is larger by area?',
+    precision: 0, source: worldBank('AG.SRF.TOTL.K2'), format: v => `${integer.format(v)} km²`
+  },
+  {
+    id: 'gdp', label: 'GDP', question: 'Which country has a higher GDP?',
+    precision: 0, source: worldBank('NY.GDP.MKTP.CD'), format: v => usdCompact.format(v)
+  },
+  {
+    id: 'gdp_per_capita', label: 'GDP per Capita', question: 'Which country has a higher GDP per capita?',
+    precision: 0, source: worldBank('NY.GDP.PCAP.CD'), format: v => usdWhole.format(v)
+  },
+  {
+    id: 'gni_per_capita_ppp', label: 'GNI per Capita (PPP)', question: 'Which country has a higher GNI per capita (PPP)?',
+    precision: 0, source: worldBank('NY.GNP.PCAP.PP.CD'), format: v => `${usdWhole.format(v)} PPP`
+  },
+  {
+    id: 'density', label: 'Pop. Density', question: 'Which country has a higher population density?',
+    precision: 1, source: worldBank('EN.POP.DNST'), format: v => `${oneDecimal.format(v)}/km²`
+  },
+  {
+    id: 'literacy', label: 'Literacy Rate', question: 'Which country has a higher adult literacy rate?',
+    precision: 1, source: worldBank('SE.ADT.LITR.ZS'), format: percent
+  },
+  {
+    id: 'hdi', label: 'HDI', question: 'Which country has a higher Human Development Index?',
+    precision: 3, source: { kind: 'owid', chart: 'human-development-index' }, format: v => threeDecimals.format(v)
+  },
+  {
+    id: 'life_expectancy', label: 'Life Expectancy', question: 'Which country has a higher life expectancy?',
+    precision: 1, source: worldBank('SP.DYN.LE00.IN'), format: v => `${oneDecimal.format(v)} years`
+  },
+  {
+    id: 'fertility', label: 'Fertility Rate', question: 'Which country has a higher fertility rate?',
+    precision: 2, source: worldBank('SP.DYN.TFRT.IN'), format: v => `${twoDecimals.format(v)} births/woman`
+  },
+  {
+    id: 'urban_population', label: 'Urbanization', question: 'Which country has a higher share of people living in cities?',
+    precision: 1, source: worldBank('SP.URB.TOTL.IN.ZS'), format: percent
+  },
+  {
+    id: 'internet_users', label: 'Internet Use', question: 'Which country has a higher share of internet users?',
+    precision: 1, source: worldBank('IT.NET.USER.ZS'), format: percent
+  },
+  {
+    id: 'forest_area', label: 'Forest Cover', question: 'Which country has a higher share of land covered by forest?',
+    precision: 1, source: worldBank('AG.LND.FRST.ZS'), format: percent
+  }
+];
+
+export const DEFAULT_METRIC_ID: MetricId = 'population';
+
+export const findMetric = (id: string): Metric | undefined => METRICS.find(m => m.id === id);
+
+
+================================================================================
+FILE: src/quiz.ts
+================================================================================
+import type { Country, Metric } from './types.ts';
+
+export interface Round {
+  readonly metric: Metric;
+  readonly first: Country;
+  readonly second: Country;
+  readonly answer: Country;
+}
+
+export type Random = () => number;
+
+const MAX_ATTEMPTS = 200;
+
+export const valueOf = (metric: Metric, country: Country): number | undefined => country.metrics[metric.id]?.value;
+
+export const isDistinguishable = (metric: Metric, a: Country, b: Country): boolean => {
+  const va = valueOf(metric, a);
+  const vb = valueOf(metric, b);
+  return va !== undefined && vb !== undefined && va !== vb && metric.format(va) !== metric.format(vb);
+};
+
+const candidatesFor = (metric: Metric, countries: readonly Country[]): Country[] =>
+  countries.filter(c => valueOf(metric, c) !== undefined);
+
+export const isPlayable = (metric: Metric, countries: readonly Country[]): boolean =>
+  new Set(candidatesFor(metric, countries).map(c => metric.format(valueOf(metric, c)!))).size >= 2;
+
+export const createRound = (metric: Metric, countries: readonly Country[], random: Random = Math.random): Round | null => {
+  const pool = candidatesFor(metric, countries);
+  if (pool.length < 2) return null;
+
+  const pick = () => pool[Math.floor(random() * pool.length)]!;
+  for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
+    const first = pick();
+    const second = pick();
+    if (first.iso2 !== second.iso2 && isDistinguishable(metric, first, second)) {
+      const answer = valueOf(metric, first)! > valueOf(metric, second)! ? first : second;
+      return { metric, first, second, answer };
+    }
+  }
+  return null;
+};
+
+
+================================================================================
+FILE: src/storage.ts
+================================================================================
+import { DEFAULT_METRIC_ID } from './metrics.ts';
+
+export interface Stats {
+  correctAnswers: number;
+  totalQuestions: number;
+  currentStreak: number;
+  bestStreak: number;
+}
+
+export interface Settings {
+  selectedQuestionId: string;
+  feedbackEnabled: boolean;
+}
+
+export type PersistedState = Stats & Settings;
+
+const STORAGE_KEY = 'countryQuizState';
+
+export const EMPTY_STATS: Readonly<Stats> = { correctAnswers: 0, totalQuestions: 0, currentStreak: 0, bestStreak: 0 };
+
+const DEFAULTS: Readonly<PersistedState> = { ...EMPTY_STATS, selectedQuestionId: DEFAULT_METRIC_ID, feedbackEnabled: true };
+
+const count = (value: unknown, fallback: number): number =>
+  typeof value === 'number' && Number.isInteger(value) && value >= 0 ? value : fallback;
+
+export const loadState = (): PersistedState => {
+  try {
+    const parsed: Record<string, unknown> = JSON.parse(localStorage.getItem(STORAGE_KEY) ?? '{}');
+    return {
+      correctAnswers: count(parsed['correctAnswers'], DEFAULTS.correctAnswers),
+      totalQuestions: count(parsed['totalQuestions'], DEFAULTS.totalQuestions),
+      currentStreak: count(parsed['currentStreak'], DEFAULTS.currentStreak),
+      bestStreak: count(parsed['bestStreak'], DEFAULTS.bestStreak),
+      selectedQuestionId: typeof parsed['selectedQuestionId'] === 'string' ? parsed['selectedQuestionId'] : DEFAULTS.selectedQuestionId,
+      feedbackEnabled: typeof parsed['feedbackEnabled'] === 'boolean' ? parsed['feedbackEnabled'] : DEFAULTS.feedbackEnabled
+    };
+  } catch {
+    return { ...DEFAULTS };
+  }
+};
+
+export const saveState = (state: PersistedState): void => {
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+  } catch (e) {
+    console.warn('Failed to save state:', e);
+  }
+};
+
+
+================================================================================
+FILE: src/types.ts
+================================================================================
+export type MetricId =
+  | 'population'
+  | 'area'
+  | 'gdp'
+  | 'gdp_per_capita'
+  | 'gni_per_capita_ppp'
+  | 'density'
+  | 'literacy'
+  | 'hdi'
+  | 'life_expectancy'
+  | 'fertility'
+  | 'urban_population'
+  | 'internet_users'
+  | 'forest_area';
+
+export type MetricSource =
+  | { readonly kind: 'worldBank'; readonly indicator: string }
+  | { readonly kind: 'owid'; readonly chart: string };
+
+export interface Metric {
+  readonly id: MetricId;
+  readonly label: string;
+  readonly question: string;
+  readonly precision: number;
+  readonly source: MetricSource;
+  readonly format: (value: number) => string;
+}
+
+export interface Observation {
+  value: number;
+  year?: number;
+}
+
+export interface CountryRecord {
+  iso2: string;
+  iso3?: string;
+  name: string;
+  region: string;
+  metrics: Partial<Record<MetricId, Observation>>;
+}
+
+export interface Dataset {
+  countries: CountryRecord[];
+}
+
+export interface Country extends CountryRecord {
+  flag: string;
+}
+
+
+================================================================================
+FILE: tests/data.test.ts
+================================================================================
+import assert from 'node:assert/strict';
+import { describe, it } from 'node:test';
+import { COUNTRIES, toFlag } from '../src/data.ts';
+import { METRICS } from '../src/metrics.ts';
+import { isPlayable } from '../src/quiz.ts';
+
+describe('bundled dataset', () => {
+  it('has unique ISO codes', () => assert.equal(new Set(COUNTRIES.map(c => c.iso2)).size, COUNTRIES.length));
+
+  it('has valid ISO 3166-1 alpha-2 codes and names', () => {
+    for (const c of COUNTRIES) {
+      assert.match(c.iso2, /^[A-Z]{2}$/);
+      assert.ok(c.name.trim().length > 0);
+    }
+  });
+
+  it('only contains finite metric values for known metrics', () => {
+    const known = new Set<string>(METRICS.map(m => m.id));
+    for (const c of COUNTRIES) {
+      for (const [id, observation] of Object.entries(c.metrics)) {
+        assert.ok(known.has(id), `${c.iso2} has unknown metric ${id}`);
+        assert.ok(Number.isFinite(observation.value), `${c.iso2}.${id} is not finite`);
+      }
+    }
+  });
+
+  it('keeps the core categories playable', () => {
+    for (const id of ['population', 'area', 'gdp', 'life_expectancy']) {
+      assert.ok(isPlayable(METRICS.find(m => m.id === id)!, COUNTRIES), id);
+    }
+  });
+});
+
+describe('toFlag', () => {
+  it('builds regional indicator flags', () => assert.equal(toFlag('ca'), '🇨🇦'));
+});
+
+
+================================================================================
+FILE: tests/quiz.test.ts
+================================================================================
+import assert from 'node:assert/strict';
+import { describe, it } from 'node:test';
+import { findMetric } from '../src/metrics.ts';
+import { createRound, isDistinguishable, isPlayable } from '../src/quiz.ts';
+import type { Country, Metric } from '../src/types.ts';
+
+const metric = findMetric('literacy')!;
+
+const country = (iso2: string, literacy?: number): Country => ({
+  iso2,
+  name: iso2,
+  region: 'Test',
+  flag: '',
+  metrics: literacy === undefined ? {} : { literacy: { value: literacy } }
+});
+
+const sequence = (...values: number[]) => {
+  let i = 0;
+  return () => values[i++ % values.length]!;
+};
+
+describe('isDistinguishable', () => {
+  it('rejects equal values', () => assert.equal(isDistinguishable(metric, country('AA', 99), country('BB', 99)), false));
+  it('rejects values that format identically', () => assert.equal(isDistinguishable(metric, country('AA', 99.01), country('BB', 99.04)), false));
+  it('rejects missing values', () => assert.equal(isDistinguishable(metric, country('AA'), country('BB', 50)), false));
+  it('accepts distinct values', () => assert.equal(isDistinguishable(metric, country('AA', 98), country('BB', 99)), true));
+});
+
+describe('createRound', () => {
+  it('picks the higher value as the answer', () => {
+    const round = createRound(metric, [country('AA', 40), country('BB', 90)], sequence(0, 0.9));
+    assert.ok(round);
+    assert.equal(round.answer.iso2, 'BB');
+  });
+
+  it('never pairs a country with itself or a tie', () => {
+    const pool = [country('AA', 50), country('BB', 50), country('CC', 70)];
+    for (let i = 0; i < 200; i++) {
+      const round = createRound(metric, pool);
+      assert.ok(round);
+      assert.notEqual(round.first.iso2, round.second.iso2);
+      assert.ok(isDistinguishable(metric, round.first, round.second));
+    }
+  });
+
+  it('returns null when no valid pair exists', () => {
+    assert.equal(createRound(metric, [country('AA', 50), country('BB', 50)]), null);
+    assert.equal(createRound(metric, [country('AA', 50), country('BB')]), null);
+  });
+});
+
+describe('isPlayable', () => {
+  const m: Metric = metric;
+  it('requires at least two distinguishable values', () => {
+    assert.equal(isPlayable(m, [country('AA', 50), country('BB', 50)]), false);
+    assert.equal(isPlayable(m, [country('AA', 50), country('BB', 60)]), true);
+  });
+});
+
+
+================================================================================
+FILE: tests/update-data.test.ts
+================================================================================
+import assert from 'node:assert/strict';
+import { describe, it } from 'node:test';
+import { buildDataset, displayName, validateDataset } from '../scripts/lib/dataset.ts';
+import { latestByCountry } from '../scripts/lib/observations.ts';
+import { parseCsv, toRawObservations as fromOwid } from '../scripts/lib/owid.ts';
+import { isAggregate, toRawObservations as fromWorldBank } from '../scripts/lib/world-bank.ts';
+import { METRICS } from '../src/metrics.ts';
+import type { MetricId } from '../src/types.ts';
+
+describe('parseCsv', () => {
+  it('handles quotes, escaped quotes and CRLF', () => {
+    assert.deepEqual(parseCsv('a,b\r\n"x, y","say ""hi"""\r\n'), [['a', 'b'], ['x, y', 'say "hi"']]);
+  });
+});
+
+describe('OWID rows', () => {
+  it('keeps ISO3 rows with values only', () => {
+    const rows = parseCsv('Entity,Code,Year,Human Development Index\nWorld,OWID_WRL,2023,0.75\nNorway,NOR,2023,0.97\nChad,TCD,2023,\n');
+    assert.deepEqual(fromOwid(rows), [{ iso3: 'NOR', year: 2023, value: 0.97 }]);
+  });
+});
+
+describe('World Bank rows', () => {
+  it('drops null values', () => {
+    assert.deepEqual(
+      fromWorldBank([
+        { countryiso3code: 'CAN', date: '2024', value: 41 },
+        { countryiso3code: 'CAN', date: '2025', value: null }
+      ]),
+      [{ iso3: 'CAN', year: 2024, value: 41 }]
+    );
+  });
+
+  it('detects aggregates', () => {
+    assert.equal(isAggregate({ id: 'WLD', iso2Code: '1W', name: 'World', region: { id: 'NA', value: 'Aggregates' } }), true);
+  });
+});
+
+describe('latestByCountry', () => {
+  it('picks the most recent year within range', () => {
+    const latest = latestByCountry(
+      [
+        { iso3: 'CAN', year: 2020, value: 1 },
+        { iso3: 'CAN', year: 2023, value: 3 },
+        { iso3: 'CAN', year: 2022, value: 2 },
+        { iso3: 'MEX', year: 1990, value: 9 }
+      ],
+      2000
+    );
+    assert.deepEqual(latest.get('CAN'), { value: 3, year: 2023 });
+    assert.equal(latest.has('MEX'), false);
+  });
+});
+
+describe('buildDataset', () => {
+  const countries = [
+    { iso2: 'NO', iso3: 'NOR', name: 'Norway', region: 'Europe & Central Asia' },
+    { iso2: 'CA', iso3: 'CAN', name: 'Canada', region: 'North America' }
+  ];
+  const observations = new Map<MetricId, Map<string, { value: number; year: number }>>([
+    ['population', new Map([['NOR', { value: 5_500_000.4, year: 2024 }], ['CAN', { value: 41_000_000, year: 2024 }]])],
+    ['area', new Map([['CAN', { value: 9_984_670, year: 2022 }]])],
+    ['hdi', new Map([['NOR', { value: 0.96612, year: 2023 }]])]
+  ]);
+
+  it('rounds, sorts and drops countries missing required metrics', () => {
+    const dataset = buildDataset(countries, METRICS, observations, ['population', 'area']);
+    assert.deepEqual(dataset.countries.map(c => c.iso2), ['CA']);
+    const withoutArea = buildDataset(countries, METRICS, observations, ['population']);
+    assert.deepEqual(withoutArea.countries.map(c => c.iso2), ['CA', 'NO']);
+    assert.deepEqual(withoutArea.countries[1]!.metrics.population, { value: 5_500_000, year: 2024 });
+    assert.deepEqual(withoutArea.countries[1]!.metrics.hdi, { value: 0.966, year: 2023 });
+  });
+
+  it('reports coverage problems', () => {
+    const dataset = buildDataset(countries, METRICS, observations, ['population']);
+    const problems = validateDataset(dataset, METRICS, { required: ['population'], minCountries: 3, minPerMetric: 1 });
+    assert.ok(problems.some(p => p.startsWith('Only 2 countries')));
+    assert.ok(problems.some(p => p.startsWith('gdp:')));
+  });
+});
+
+describe('displayName', () => {
+  it('prefers overrides, then CLDR names, then the fallback', () => {
+    assert.equal(displayName('CD', 'Congo, Dem. Rep.'), 'DR Congo');
+    assert.equal(displayName('EG', 'Egypt, Arab Rep.'), 'Egypt');
+    assert.equal(displayName('JG', 'Channel Islands'), 'Channel Islands');
+  });
+});
+
+
+================================================================================
+FILE: tsconfig.node.json
+================================================================================
+{
+  "compilerOptions": {
+    "target": "ES2023",
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "lib": ["ES2023"],
+    "types": ["node"],
+    "skipLibCheck": true,
+    "allowImportingTsExtensions": true,
+    "resolveJsonModule": true,
+    "verbatimModuleSyntax": true,
+    "moduleDetection": "force",
+    "noEmit": true,
+    "strict": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "erasableSyntaxOnly": true,
+    "noFallthroughCasesInSwitch": true,
+    "noUncheckedIndexedAccess": true,
+    "exactOptionalPropertyTypes": true
+  },
+  "include": ["scripts/**/*.ts", "tests/**/*.ts"]
+}
+
+
+================================================================================
+FILE: .github/workflows/deploy.yml
+================================================================================
+name: Build and deploy
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+  workflow_call:
+    inputs:
+      ref:
+        description: Commit to build and deploy
+        type: string
+        required: true
+
+permissions:
+  contents: read
 
 jobs:
   build:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.ref || github.sha }}
+          persist-credentials: false
 
       - name: Setup Node
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@v7
         with:
-          node-version: 24
+          node-version: lts/*
           cache: yarn
 
       - name: Install dependencies
         run: yarn install --frozen-lockfile
 
+      - name: Test
+        run: yarn test
+
       - name: Build
         run: yarn build
 
-      - name: Setup Pages
-        uses: actions/configure-pages@v5
-
       - name: Upload artifact
-        uses: actions/upload-pages-artifact@v3
+        if: github.event_name != 'pull_request'
+        uses: actions/upload-pages-artifact@v5
         with:
           path: dist
 
   deploy:
+    if: github.event_name != 'pull_request'
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    concurrency:
+      group: pages
+      cancel-in-progress: false
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
-    runs-on: ubuntu-latest
-    needs: build
     steps:
+      - name: Configure Pages
+        uses: actions/configure-pages@v6
+
       - name: Deploy to GitHub Pages
         id: deployment
-        uses: actions/deploy-pages@v4
+        uses: actions/deploy-pages@v5
 
 
 ================================================================================
@@ -67,83 +3936,62 @@ A client-side country comparison quiz game. Test your knowledge of world geograp
 
 ## Features
 
-- **8 Quiz Categories**
+- **13 Quiz Categories**
   - Population
   - Area (km²)
-  - GDP (nominal)
+  - GDP (nominal, current US$)
   - GDP per Capita
+  - GNI per Capita (PPP)
   - Population Density
-  - Literacy Rate
+  - Adult Literacy Rate
   - Human Development Index (HDI)
   - Life Expectancy
+  - Fertility Rate
+  - Urbanization (share of urban population)
+  - Internet Use (share of population)
+  - Forest Cover (share of land area)
 
-- **80+ Countries** across all continents with real-world data from World Bank, UN, IMF, and UNDP (2023/2024 estimates)
-
+- **Every country with World Bank coverage** (~200 economies), each value shown with the year it was measured
+- **Automatically refreshed data** via a weekly GitHub Actions workflow
+- **No ties** — pairs with equal (or identically displayed) values are never asked
 - **Score Tracking**
-  - Current score (correct/total)
-  - Current streak counter
-  - Best streak tracking
+  - Current score (correct/total), current streak, best streak
   - All stats persist in localStorage
-
+- **Audible and tactile feedback**
+  - Short synthesized tones (Web Audio API) and vibration (Vibration API) on taps, correct and wrong answers
+  - Toggle with the 🔊/🔇 button; the choice is remembered
+  - Vibration is unavailable on iOS Safari; sound still works
 - **Progressive Web App (PWA)**
-  - Installable on mobile devices ("Add to Home Screen")
-  - Works offline after first load
-  - Standalone app experience
-
+  - Installable ("Add to Home Screen")
+  - Works offline after first load (network-first service worker, same-origin only)
+- **Accessible** — real buttons, keyboard navigation, visible focus, reduced-motion support
 - **Fully Client-Side**
-  - No server required
-  - No data collection
-  - Runs entirely in your browser
+  - No server, no data collection, no third-party requests at runtime
+  - Statistics are bundled into the app at build time
 
 ## Tech Stack
 
-- **TypeScript** - Type-safe code
-- **Vite** (rolldown-vite) - Fast build tooling
-- **Vanilla JS** - No framework dependencies
-- **CSS** - Custom responsive styling
-- **localStorage** - Persistent state
+- **TypeScript 7** (native compiler)
+- **Vite 8** (Rolldown-based bundler)
+- **Vanilla TypeScript** - No framework dependencies
+- **Node.js test runner** - Unit tests with no extra dependencies
+- **GitHub Actions + GitHub Pages** - CI, scheduled data refresh, deployment
+- **Dependabot** - Weekly npm and GitHub Actions updates
 
 ## Development
 
 ### Prerequisites
 
-- Node.js 22+
-- Yarn
+- Node.js 22.18+ (current LTS recommended; scripts run TypeScript directly via Node type stripping)
+- Yarn 1.x
 
 ### Setup
 
 ```sh
-# Clone the repository
 git clone https://github.com/mycountryquiz/mycountryquiz.github.io.git
 cd mycountryquiz.github.io
-
-# Install dependencies
 yarn install
-
-# Start development server
 yarn dev
-
-# Build for production
-yarn build
-
-# Preview production build
-yarn preview
-```
-
-### Project Structure
-
-```
-├── src/
-│   ├── main.ts      # Game logic and UI
-│   ├── data.ts      # Country data and types
-│   └── style.css    # Responsive styling
-├── public/
-│   └── manifest.json # PWA manifest
-├── index.html        # Entry point
-├── scripts/
-│   └── dump-code.sh  # Export code for LLM context
-└── docs/llm/
-    └── dump.txt      # Code dump for LLM assistance
 ```
 
 ### Scripts
@@ -151,19 +3999,89 @@ yarn preview
 | Command | Description |
 |---------|-------------|
 | `yarn dev` | Start dev server at localhost:5173 |
+| `yarn typecheck` | Type-check app, scripts and tests |
+| `yarn test` | Run unit tests |
 | `yarn build` | Type-check and build for production |
 | `yarn preview` | Preview production build locally |
+| `yarn update-data` | Fetch the latest statistics into `src/data/countries.json` |
 | `./scripts/dump-code.sh` | Export codebase to docs/llm/dump.txt |
 
-## Data Sources
+### Project Structure
 
-Country statistics sourced from:
-- [World Bank Open Data](https://data.worldbank.org/)
-- [United Nations Statistics](https://unstats.un.org/)
-- [IMF World Economic Outlook](https://www.imf.org/en/Publications/WEO)
-- [UNDP Human Development Reports](https://hdr.undp.org/)
+```
+├── src/
+│   ├── main.ts             # UI (QuizApp)
+│   ├── quiz.ts             # Pure game logic (round creation, tie guard)
+│   ├── metrics.ts          # Category definitions, sources and formatting
+│   ├── data.ts             # Loads bundled dataset, derives flags
+│   ├── storage.ts          # localStorage persistence
+│   ├── feedback.ts         # Sound and vibration
+│   ├── types.ts            # Shared types
+│   ├── style.css           # Responsive styling
+│   └── data/
+│       └── countries.json  # Generated dataset
+├── scripts/
+│   ├── update-data.ts      # Data refresh entry point
+│   ├── lib/                # HTTP, World Bank, OWID, dataset builder
+│   └── dump-code.sh        # Export code for LLM context
+├── tests/                  # node:test suites
+├── public/
+│   ├── manifest.json       # PWA manifest
+│   └── sw.js               # Offline service worker
+├── .github/
+│   ├── workflows/
+│   │   ├── deploy.yml      # Test, build, deploy (also reusable)
+│   │   └── update-data.yml # Weekly data refresh
+│   └── dependabot.yml
+├── index.html
+├── tsconfig.json           # App (browser)
+└── tsconfig.node.json      # Scripts and tests (Node)
+```
 
-Data represents 2023/2024 estimates where available.
+## Data
+
+### Sources
+
+| Category | Source | Indicator |
+|----------|--------|-----------|
+| Population | World Bank WDI | `SP.POP.TOTL` |
+| Area | World Bank WDI | `AG.SRF.TOTL.K2` |
+| GDP | World Bank WDI | `NY.GDP.MKTP.CD` |
+| GDP per Capita | World Bank WDI | `NY.GDP.PCAP.CD` |
+| GNI per Capita (PPP) | World Bank WDI | `NY.GNP.PCAP.PP.CD` |
+| Population Density | World Bank WDI | `EN.POP.DNST` |
+| Adult Literacy Rate | World Bank WDI (UNESCO UIS) | `SE.ADT.LITR.ZS` |
+| HDI | UNDP Human Development Report via Our World in Data | `human-development-index` |
+| Life Expectancy | World Bank WDI | `SP.DYN.LE00.IN` |
+| Fertility Rate | World Bank WDI | `SP.DYN.TFRT.IN` |
+| Urbanization | World Bank WDI | `SP.URB.TOTL.IN.ZS` |
+| Internet Use | World Bank WDI (ITU) | `IT.NET.USER.ZS` |
+| Forest Cover | World Bank WDI (FAO) | `AG.LND.FRST.ZS` |
+
+- [World Bank Open Data](https://data.worldbank.org/) (CC BY 4.0)
+- [UNDP Human Development Reports](https://hdr.undp.org/) via [Our World in Data](https://ourworldindata.org/grapher/human-development-index) (CC BY 4.0)
+
+For every country and category the most recent non-empty value from the last 20 years is used, and the year is shown next to the value. Country names come from the Unicode CLDR (via `Intl.DisplayNames`) with a few short-form overrides; flags are derived from ISO 3166-1 codes. Regional aggregates and entries without population and area are excluded.
+
+### Automatic updates
+
+`.github/workflows/update-data.yml` runs every Monday (and on demand from the Actions tab):
+
+1. Runs `yarn update-data`, which fetches every metric, keeps the latest value per country, rounds to each metric's precision and writes a deterministically sorted `src/data/countries.json`.
+2. Rejects the result if coverage looks wrong (fewer than 180 countries, any category under 60 countries, duplicate codes) so a broken upstream response never reaches the site.
+3. Runs tests and a full build.
+4. Commits only when the data actually changed, then calls `deploy.yml` to publish that exact commit.
+
+The workflow pushes to `main` with `GITHUB_TOKEN`; if branch protection blocks this, allow GitHub Actions to bypass it or switch the commit step to open a pull request.
+
+To add a category, add an entry to `METRICS` in `src/metrics.ts` with a World Bank indicator or OWID chart slug, then run `yarn update-data`.
+
+## Privacy
+
+- No analytics, cookies, fingerprinting, or external requests at runtime
+- localStorage holds only score, streaks, selected category and the feedback toggle
+- The Web Audio API is used only to play tones; nothing is read back
+- The service worker caches same-origin files on your device and never contacts other hosts
 
 ## AI Disclosure
 
@@ -187,7 +4105,7 @@ Contributions welcome! Please:
 1. Fork the repository
 2. Create a feature branch
 3. Make your changes
-4. Run `yarn build` to ensure it compiles
+4. Run `yarn test && yarn build` to ensure it passes and compiles
 5. Submit a pull request
 
 ## Acknowledgments
@@ -224,19 +4142,24 @@ FILE: package.json
 {
   "name": "countryquiz",
   "private": true,
-  "version": "0.0.0",
+  "version": "1.0.0",
   "type": "module",
+  "license": "AGPL-3.0-only",
+  "engines": {
+    "node": ">=22.18.0"
+  },
   "scripts": {
     "dev": "vite",
-    "build": "tsc && vite build",
-    "preview": "vite preview"
+    "typecheck": "tsc -p tsconfig.json && tsc -p tsconfig.node.json",
+    "test": "node --test \"tests/**/*.test.ts\"",
+    "build": "tsc -p tsconfig.json && tsc -p tsconfig.node.json && vite build",
+    "preview": "vite preview",
+    "update-data": "node scripts/update-data.ts"
   },
   "devDependencies": {
-    "typescript": "~5.9.3",
-    "vite": "npm:rolldown-vite@7.2.5"
-  },
-  "resolutions": {
-    "vite": "npm:rolldown-vite@7.2.5"
+    "@types/node": "^24.19.4",
+    "typescript": "^7.0.2",
+    "vite": "^8.4.0"
   }
 }
 
@@ -371,421 +4294,257 @@ echo "Done! Dumped $file_count files ($total_size bytes) to $OUTPUT_FILE"
 ================================================================================
 FILE: src/data.ts
 ================================================================================
-export interface CountryData {
-  name: string;
-  iso2: string;
-  flag: string;
-  continent: string;
-  area: number | null;
-  population: number | null;
-  gdp: number | null;
-  gdpPerCapita: number | null;
-  gniPpp: number | null;
-  density: number | null;
-  literacy: number | null;
-  hdi: number | null;
-  lifeExpectancy: number | null;
-}
+import raw from './data/countries.json' with { type: 'json' };
+import type { Country, Dataset } from './types.ts';
 
-export interface QuestionType {
-  id: string;
-  label: string;
-  template: string;
-  getValue: (c: CountryData) => number | null;
-  format: (val: number) => string;
-}
+const REGIONAL_INDICATOR_OFFSET = 0x1f1e6 - 'A'.charCodeAt(0);
 
-export interface GameState {
-  correctAnswers: number;
-  totalQuestions: number;
-  currentStreak: number;
-  bestStreak: number;
-  hasAnswered: boolean;
-  currentQuestion: QuestionType | null;
-  country1: CountryData | null;
-  country2: CountryData | null;
-  correctCountry: CountryData | null;
-  selectedQuestionId: string;
-}
+export const toFlag = (iso2: string): string =>
+  String.fromCodePoint(...[...iso2.toUpperCase()].map(c => c.charCodeAt(0) + REGIONAL_INDICATOR_OFFSET));
 
-export const QUESTIONS: QuestionType[] = [
-  { id: 'population', label: 'Population', template: 'Which country has a larger population?',
-    getValue: c => c.population, format: v => v.toLocaleString() },
-  { id: 'area', label: 'Area', template: 'Which country is larger by area?',
-    getValue: c => c.area, format: v => `${v.toLocaleString()} km²` },
-  { id: 'gdp', label: 'GDP', template: 'Which country has a higher GDP?',
-    getValue: c => c.gdp, format: v => `$${v.toLocaleString()}M` },
-  { id: 'gdp_per_capita', label: 'GDP per Capita', template: 'Which country has higher GDP per capita?',
-    getValue: c => c.gdpPerCapita, format: v => `$${v.toLocaleString()}` },
-  { id: 'density', label: 'Pop. Density', template: 'Which country has higher population density?',
-    getValue: c => c.density, format: v => `${v.toFixed(1)}/km²` },
-  { id: 'literacy', label: 'Literacy Rate', template: 'Which country has a higher literacy rate?',
-    getValue: c => c.literacy, format: v => `${v.toFixed(1)}%` },
-  { id: 'hdi', label: 'HDI', template: 'Which country has a higher Human Development Index?',
-    getValue: c => c.hdi, format: v => v.toFixed(3) },
-  { id: 'life_expectancy', label: 'Life Expectancy', template: 'Which country has higher life expectancy?',
-    getValue: c => c.lifeExpectancy, format: v => `${v.toFixed(1)} years` }
-];
+const dataset = raw as Dataset;
 
-const C = (name: string, iso2: string, flag: string, cont: string, area: number | null, pop: number | null,
-  gdp: number | null, gdpPc: number | null, gniPpp: number | null, density: number | null,
-  literacy: number | null, hdi: number | null, lifeExp: number | null): CountryData => ({
-  name, iso2, flag, continent: cont, area, population: pop, gdp, gdpPerCapita: gdpPc,
-  gniPpp, density, literacy, hdi, lifeExpectancy: lifeExp
-});
-
-export const COUNTRIES: CountryData[] = [
-  // AFRICA
-  C("Algeria","DZ","🇩🇿","Africa",2381741,45400000,239900,5284,13310,19.1,81.4,0.745,76.4),
-  C("Angola","AO","🇦🇴","Africa",1246700,36000000,92124,2560,7250,28.9,72.0,0.595,62.0),
-  C("Benin","BJ","🇧🇯","Africa",112622,13700000,19234,1404,4030,121.7,45.8,0.504,60.0),
-  C("Botswana","BW","🇧🇼","Africa",581730,2600000,19396,7460,18600,4.5,88.9,0.708,61.1),
-  C("Burkina Faso","BF","🇧🇫","Africa",274200,23000000,20327,884,2310,83.9,34.5,0.438,59.3),
-  C("Cameroon","CM","🇨🇲","Africa",475442,28600000,48455,1694,4220,60.2,77.1,0.587,61.0),
-  C("DR Congo","CD","🇨🇩","Africa",2344858,102300000,66380,649,1430,43.6,80.0,0.479,60.7),
-  C("Egypt","EG","🇪🇬","Africa",1001450,105000000,387086,3686,16450,104.9,73.1,0.728,70.2),
-  C("Ethiopia","ET","🇪🇹","Africa",1104300,126500000,163698,1294,3070,114.6,51.8,0.492,65.0),
-  C("Ghana","GH","🇬🇭","Africa",238533,34100000,76370,2240,5870,143.0,79.0,0.602,63.8),
-  C("Kenya","KE","🇰🇪","Africa",580367,55100000,113420,2058,5720,95.0,82.6,0.575,61.4),
-  C("Morocco","MA","🇲🇦","Africa",446550,37500000,141109,3764,9140,84.0,75.9,0.698,74.0),
-  C("Nigeria","NG","🇳🇬","Africa",923768,223800000,472620,2112,5860,242.3,62.0,0.548,52.7),
-  C("South Africa","ZA","🇿🇦","Africa",1221037,60400000,399015,6607,16090,49.5,95.0,0.713,62.3),
-  C("Tanzania","TZ","🇹🇿","Africa",947300,65500000,79162,1209,2980,69.2,78.1,0.532,66.2),
-  C("Tunisia","TN","🇹🇳","Africa",163610,12400000,46840,3778,13130,75.8,79.7,0.732,73.8),
-  C("Uganda","UG","🇺🇬","Africa",241038,48600000,45561,937,2660,201.6,79.0,0.525,62.7),
-  // ASIA
-  C("Afghanistan","AF","🇦🇫","Asia",652230,42240000,14580,345,null,64.8,37.3,0.462,62.0),
-  C("Bangladesh","BD","🇧🇩","Asia",147570,172000000,460201,2676,7040,1166.0,74.9,0.670,72.4),
-  C("China","CN","🇨🇳","Asia",9596960,1412000000,17963171,12720,23310,147.0,97.5,0.788,78.2),
-  C("India","IN","🇮🇳","Asia",3287263,1428000000,3737000,2617,8400,434.0,74.4,0.644,67.2),
-  C("Indonesia","ID","🇮🇩","Asia",1904569,277500000,1417387,5108,15850,145.7,96.0,0.713,67.6),
-  C("Iran","IR","🇮🇷","Asia",1648195,89200000,388000,4351,16750,54.1,88.7,0.774,73.9),
-  C("Iraq","IQ","🇮🇶","Asia",438317,44500000,267900,6021,11510,101.5,85.6,0.686,70.4),
-  C("Israel","IL","🇮🇱","Asia",20770,9750000,525000,53853,47580,470.0,97.8,0.915,82.6),
-  C("Japan","JP","🇯🇵","Asia",377975,124500000,4230862,33960,49240,329.6,99.0,0.920,84.8),
-  C("Malaysia","MY","🇲🇾","Asia",330803,34300000,430895,12563,33550,103.7,95.9,0.807,74.9),
-  C("Pakistan","PK","🇵🇰","Asia",881912,240500000,376493,1565,6530,272.8,58.0,0.544,66.1),
-  C("Philippines","PH","🇵🇭","Asia",300000,117300000,435667,3715,10590,391.0,96.3,0.710,69.3),
-  C("Saudi Arabia","SA","🇸🇦","Asia",2149690,36400000,1069437,29386,56920,16.9,97.6,0.875,76.9),
-  C("Singapore","SG","🇸🇬","Asia",733,5920000,515548,87088,116500,8075.0,97.5,0.949,84.1),
-  C("South Korea","KR","🇰🇷","Asia",100210,51780000,1721909,33268,52990,517.0,99.0,0.929,83.7),
-  C("Thailand","TH","🇹🇭","Asia",513120,71800000,514945,7172,21220,140.0,94.1,0.803,79.3),
-  C("Turkey","TR","🇹🇷","Asia",783562,85800000,1029303,12001,38170,109.4,96.7,0.838,76.0),
-  C("UAE","AE","🇦🇪","Asia",83600,9440000,507532,53757,96850,112.9,98.0,0.937,78.7),
-  C("Vietnam","VN","🇻🇳","Asia",331212,99500000,449900,4522,13860,300.4,95.8,0.726,73.6),
-  // EUROPE
-  C("Austria","AT","🇦🇹","Europe",83879,9100000,515768,56672,66800,108.5,99.0,0.926,82.0),
-  C("Belgium","BE","🇧🇪","Europe",30528,11700000,609887,52133,65430,383.3,99.0,0.942,82.2),
-  C("Czech Republic","CZ","🇨🇿","Europe",78867,10500000,330860,31510,49100,133.2,99.0,0.889,79.3),
-  C("Denmark","DK","🇩🇰","Europe",43094,5900000,405626,68750,72680,137.0,99.0,0.952,81.4),
-  C("Finland","FI","🇫🇮","Europe",338424,5550000,300186,54090,58580,16.4,99.0,0.942,82.0),
-  C("France","FR","🇫🇷","Europe",643801,68000000,2923489,43000,55080,105.6,99.0,0.903,82.5),
-  C("Germany","DE","🇩🇪","Europe",357022,84400000,4308854,51072,63150,236.4,99.0,0.950,81.7),
-  C("Greece","GR","🇬🇷","Europe",131957,10430000,239300,22942,38050,79.0,97.9,0.887,80.1),
-  C("Hungary","HU","🇭🇺","Europe",93028,9600000,212384,22122,40680,103.2,99.4,0.851,74.5),
-  C("Ireland","IE","🇮🇪","Europe",70273,5200000,594095,114249,87260,74.0,99.0,0.950,82.0),
-  C("Italy","IT","🇮🇹","Europe",301340,58900000,2169745,36834,52710,195.4,99.4,0.906,83.5),
-  C("Netherlands","NL","🇳🇱","Europe",41543,17800000,1009000,56693,70930,428.5,99.0,0.946,82.4),
-  C("Norway","NO","🇳🇴","Europe",323802,5500000,546768,99412,89100,17.0,99.0,0.966,83.2),
-  C("Poland","PL","🇵🇱","Europe",312679,37600000,811229,21574,41370,120.2,99.8,0.881,76.5),
-  C("Portugal","PT","🇵🇹","Europe",92212,10400000,287080,27600,40920,112.8,96.1,0.874,81.0),
-  C("Romania","RO","🇷🇴","Europe",238391,19000000,348902,18367,40320,79.7,99.1,0.827,74.2),
-  C("Russia","RU","🇷🇺","Europe",17098242,143400000,2240400,15624,36010,8.4,99.7,0.821,69.4),
-  C("Spain","ES","🇪🇸","Europe",505990,47420000,1580694,33331,48540,93.7,98.6,0.911,83.3),
-  C("Sweden","SE","🇸🇪","Europe",450295,10500000,593268,56502,62640,23.3,99.0,0.952,83.0),
-  C("Switzerland","CH","🇨🇭","Europe",41291,8800000,869601,98839,82340,213.1,99.0,0.967,84.0),
-  C("Ukraine","UA","🇺🇦","Europe",603550,37000000,160500,4339,14720,61.3,99.8,0.773,69.0),
-  C("United Kingdom","GB","🇬🇧","Europe",242495,67500000,3332059,49384,54600,278.4,99.0,0.940,80.7),
-  // NORTH AMERICA
-  C("Canada","CA","🇨🇦","N. America",9984670,40100000,2139840,53385,58040,4.0,99.0,0.935,82.7),
-  C("Costa Rica","CR","🇨🇷","N. America",51100,5200000,68379,13150,24420,101.8,97.9,0.806,77.0),
-  C("Cuba","CU","🇨🇺","N. America",109884,11100000,107352,9671,null,101.0,99.8,0.783,73.7),
-  C("Dominican Rep.","DO","🇩🇴","N. America",48671,11300000,113642,10057,22760,232.2,95.0,0.768,72.6),
-  C("Guatemala","GT","🇬🇹","N. America",108889,17600000,95003,5398,10250,161.7,83.3,0.627,69.2),
-  C("Haiti","HT","🇭🇹","N. America",27750,11700000,21178,1810,3110,421.6,61.7,0.552,64.0),
-  C("Honduras","HN","🇭🇳","N. America",112492,10400000,31717,3050,6340,92.5,87.2,0.624,70.1),
-  C("Jamaica","JM","🇯🇲","N. America",10991,2800000,17099,6107,11290,254.8,88.7,0.709,70.5),
-  C("Mexico","MX","🇲🇽","N. America",1964375,128900000,1811468,14056,22410,65.6,95.4,0.781,75.0),
-  C("Nicaragua","NI","🇳🇮","N. America",130373,7050000,15787,2239,6220,54.1,82.6,0.667,74.5),
-  C("Panama","PA","🇵🇦","N. America",75420,4400000,76523,17391,32980,58.3,95.7,0.820,76.2),
-  C("USA","US","🇺🇸","N. America",9833517,335000000,27360935,81695,80300,34.1,99.0,0.927,77.5),
-  // SOUTH AMERICA
-  C("Argentina","AR","🇦🇷","S. America",2780400,46300000,641131,13846,26390,16.7,99.0,0.849,76.6),
-  C("Bolivia","BO","🇧🇴","S. America",1098581,12400000,44315,3574,9540,11.3,94.5,0.692,63.6),
-  C("Brazil","BR","🇧🇷","S. America",8515767,216400000,2173668,10047,17000,25.4,93.5,0.760,72.8),
-  C("Chile","CL","🇨🇱","S. America",756102,19500000,335533,17206,28510,25.8,97.0,0.860,78.9),
-  C("Colombia","CO","🇨🇴","S. America",1138910,52000000,363835,6997,18180,45.7,95.6,0.758,72.8),
-  C("Ecuador","EC","🇪🇨","S. America",283561,18000000,118845,6603,12930,63.5,94.5,0.765,74.3),
-  C("Paraguay","PY","🇵🇾","S. America",406752,6800000,42956,6317,15030,16.7,94.7,0.717,70.3),
-  C("Peru","PE","🇵🇪","S. America",1285216,34000000,267603,7869,15310,26.4,94.5,0.762,73.7),
-  C("Uruguay","UY","🇺🇾","S. America",176215,3400000,77241,22718,28200,19.3,98.8,0.830,77.7),
-  C("Venezuela","VE","🇻🇪","S. America",916445,28400000,92200,3246,null,31.0,97.1,0.691,72.1),
-  // OCEANIA
-  C("Australia","AU","🇦🇺","Oceania",7692024,26500000,1687713,63688,59170,3.4,99.0,0.946,84.5),
-  C("Fiji","FJ","🇫🇯","Oceania",18274,930000,5314,5714,14570,50.9,99.1,0.729,67.4),
-  C("New Zealand","NZ","🇳🇿","Oceania",270467,5200000,251969,48455,52000,19.2,99.0,0.939,82.5),
-  C("Papua New Guinea","PG","🇵🇬","Oceania",462840,10300000,30624,2973,4620,22.3,64.2,0.558,64.5),
-];
+export const COUNTRIES: readonly Country[] = dataset.countries.map(c => ({ ...c, flag: toFlag(c.iso2) }));
 
 
 ================================================================================
 FILE: src/main.ts
 ================================================================================
 import './style.css';
-import type { CountryData, QuestionType, GameState } from './data';
-import { QUESTIONS, COUNTRIES } from './data';
+import { COUNTRIES } from './data.ts';
+import { Feedback } from './feedback.ts';
+import { DEFAULT_METRIC_ID, METRICS, findMetric } from './metrics.ts';
+import { createRound, isPlayable, valueOf, type Round } from './quiz.ts';
+import { EMPTY_STATS, loadState, saveState, type PersistedState } from './storage.ts';
+import type { Country, Metric } from './types.ts';
 
-// Storage keys
-const STORAGE_KEY = 'countryQuizState';
+const TEMPLATE = `
+  <main class="game-container">
+    <h1 class="game-title">🌍 Country Quiz</h1>
+    <div class="controls">
+      <select id="question-select" aria-label="Question category"></select>
+      <button id="feedback-btn" type="button"></button>
+      <button id="reset-btn" type="button">Reset</button>
+    </div>
+    <div class="score-display">
+      <span class="score">Score: <span id="score">0/0</span></span>
+      <span id="streak"></span>
+      <span id="best-streak"></span>
+    </div>
+    <p id="question-text" class="question-text" aria-live="polite"></p>
+    <div class="comparison-container">
+      <button id="country1" type="button" class="country-card"></button>
+      <div class="vs-badge" aria-hidden="true">VS</div>
+      <button id="country2" type="button" class="country-card"></button>
+    </div>
+    <div id="result-message" class="result-message hidden" role="status"></div>
+    <button id="next-btn" type="button" class="next-btn hidden">Next →</button>
+    <footer class="attribution">Data: World Bank WDI · UNDP HDR via Our World in Data (CC BY 4.0)</footer>
+  </main>
+`;
 
-// DOM Elements
-let questionText: HTMLElement;
-let country1Card: HTMLElement;
-let country2Card: HTMLElement;
-let resultMessage: HTMLElement;
-let nextBtn: HTMLElement;
-let scoreDisplay: HTMLElement;
-let streakDisplay: HTMLElement;
-let bestStreakDisplay: HTMLElement;
-let questionSelect: HTMLElement;
-let resetBtn: HTMLElement;
+type CardState = 'pending' | 'revealed' | 'correct' | 'wrong';
 
-// Game state
-let state: GameState = {
-  correctAnswers: 0,
-  totalQuestions: 0,
-  currentStreak: 0,
-  bestStreak: 0,
-  hasAnswered: false,
-  currentQuestion: null,
-  country1: null,
-  country2: null,
-  correctCountry: null,
-  selectedQuestionId: 'population'
+const byId = <T extends HTMLElement>(id: string): T => {
+  const element = document.getElementById(id);
+  if (!element) throw new Error(`Missing element #${id}`);
+  return element as T;
 };
 
-function loadState(): void {
-  try {
-    const saved = localStorage.getItem(STORAGE_KEY);
-    if (saved) {
-      const parsed = JSON.parse(saved);
-      state.correctAnswers = parsed.correctAnswers ?? 0;
-      state.totalQuestions = parsed.totalQuestions ?? 0;
-      state.currentStreak = parsed.currentStreak ?? 0;
-      state.bestStreak = parsed.bestStreak ?? 0;
-      state.selectedQuestionId = parsed.selectedQuestionId ?? 'population';
+class QuizApp {
+  readonly #state: PersistedState;
+  readonly #feedback: Feedback;
+  readonly #metrics: readonly Metric[];
+  #round: Round | null = null;
+  #answered = false;
+
+  readonly #question: HTMLElement;
+  readonly #cards: readonly [HTMLButtonElement, HTMLButtonElement];
+  readonly #result: HTMLElement;
+  readonly #next: HTMLButtonElement;
+  readonly #score: HTMLElement;
+  readonly #streak: HTMLElement;
+  readonly #best: HTMLElement;
+  readonly #select: HTMLSelectElement;
+  readonly #feedbackToggle: HTMLButtonElement;
+
+  constructor(root: HTMLElement) {
+    root.innerHTML = TEMPLATE;
+    this.#state = loadState();
+    this.#feedback = new Feedback(this.#state.feedbackEnabled);
+    this.#metrics = METRICS.filter(m => isPlayable(m, COUNTRIES));
+
+    this.#question = byId('question-text');
+    this.#cards = [byId('country1'), byId('country2')];
+    this.#result = byId('result-message');
+    this.#next = byId('next-btn');
+    this.#score = byId('score');
+    this.#streak = byId('streak');
+    this.#best = byId('best-streak');
+    this.#select = byId('question-select');
+    this.#feedbackToggle = byId('feedback-btn');
+
+    this.#bind(byId('reset-btn'));
+    this.#renderSelect();
+    this.#renderFeedbackToggle();
+    this.#renderScore();
+    this.#nextRound();
+  }
+
+  #bind(reset: HTMLButtonElement): void {
+    this.#cards.forEach((card, index) => card.addEventListener('click', () => this.#answer(index)));
+    this.#next.addEventListener('click', () => {
+      this.#feedback.play('tap');
+      this.#nextRound();
+    });
+    reset.addEventListener('click', () => {
+      this.#feedback.play('tap');
+      this.#reset();
+    });
+    this.#feedbackToggle.addEventListener('click', () => this.#toggleFeedback());
+    this.#select.addEventListener('change', () => {
+      this.#feedback.play('tap');
+      this.#state.selectedQuestionId = this.#select.value;
+      this.#persist();
+      this.#nextRound();
+    });
+  }
+
+  get #metric(): Metric {
+    return this.#metrics.find(m => m.id === this.#state.selectedQuestionId)
+      ?? findMetric(DEFAULT_METRIC_ID)
+      ?? METRICS[0]!;
+  }
+
+  #nextRound(): void {
+    this.#round = createRound(this.#metric, COUNTRIES);
+    this.#answered = false;
+    this.#result.className = 'result-message hidden';
+    this.#next.classList.add('hidden');
+
+    if (!this.#round) {
+      this.#question.textContent = 'Not enough data for this question type.';
+      this.#cards.forEach(card => (card.hidden = true));
+      return;
     }
-  } catch (e) {
-    console.warn('Failed to load state:', e);
-  }
-}
 
-function saveState(): void {
-  try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify({
-      correctAnswers: state.correctAnswers,
-      totalQuestions: state.totalQuestions,
-      currentStreak: state.currentStreak,
-      bestStreak: state.bestStreak,
-      selectedQuestionId: state.selectedQuestionId
-    }));
-  } catch (e) {
-    console.warn('Failed to save state:', e);
+    this.#question.textContent = this.#round.metric.question;
+    this.#renderCard(this.#cards[0], this.#round.first, 'pending');
+    this.#renderCard(this.#cards[1], this.#round.second, 'pending');
   }
-}
 
-function getRandomPair(question: QuestionType): [CountryData, CountryData] | null {
-  const valid = COUNTRIES.filter(c => question.getValue(c) !== null);
-  if (valid.length < 2) return null;
-  
-  for (let i = 0; i < 100; i++) {
-    const c1 = valid[Math.floor(Math.random() * valid.length)];
-    const c2 = valid[Math.floor(Math.random() * valid.length)];
-    const v1 = question.getValue(c1);
-    const v2 = question.getValue(c2);
-    
-    // Ensure different countries AND different values (no ties)
-    if (c1.name !== c2.name && v1 !== null && v2 !== null && v1 !== v2) {
-      return [c1, c2];
+  #answer(index: number): void {
+    const round = this.#round;
+    if (this.#answered || !round) return;
+    this.#answered = true;
+
+    const selected = index === 0 ? round.first : round.second;
+    const correct = selected.iso2 === round.answer.iso2;
+    this.#feedback.play(correct ? 'correct' : 'wrong');
+    this.#record(correct);
+
+    this.#result.textContent = correct ? '✓ Correct!' : `✗ Wrong! ${round.answer.name} was correct.`;
+    this.#result.className = `result-message ${correct ? 'correct' : 'wrong'}`;
+
+    const outcome: CardState = correct ? 'correct' : 'wrong';
+    this.#renderCard(this.#cards[0], round.first, index === 0 ? outcome : 'revealed');
+    this.#renderCard(this.#cards[1], round.second, index === 1 ? outcome : 'revealed');
+
+    this.#next.classList.remove('hidden');
+    this.#next.focus({ preventScroll: true });
+    this.#renderScore();
+    this.#persist();
+  }
+
+  #record(correct: boolean): void {
+    this.#state.totalQuestions++;
+    if (correct) {
+      this.#state.correctAnswers++;
+      this.#state.currentStreak++;
+      this.#state.bestStreak = Math.max(this.#state.bestStreak, this.#state.currentStreak);
+    } else {
+      this.#state.currentStreak = 0;
     }
   }
-  return null;
-}
 
-function getCorrectAnswer(q: QuestionType, c1: CountryData, c2: CountryData): CountryData {
-  const v1 = q.getValue(c1) ?? 0;
-  const v2 = q.getValue(c2) ?? 0;
-  return v1 > v2 ? c1 : c2;
-}
-
-function formatValue(q: QuestionType, c: CountryData): string {
-  const val = q.getValue(c);
-  if (val === null) return 'N/A';
-  return q.format(val);
-}
-
-function updateScoreDisplay(): void {
-  scoreDisplay.textContent = `${state.correctAnswers}/${state.totalQuestions}`;
-  streakDisplay.textContent = state.currentStreak > 0 ? `🔥 ${state.currentStreak}` : '';
-  bestStreakDisplay.textContent = state.bestStreak > 0 ? `⭐ Best: ${state.bestStreak}` : '';
-}
-
-function renderCard(
-  card: HTMLElement, 
-  country: CountryData, 
-  showValue: boolean, 
-  wasSelected: boolean,
-  isCorrect: boolean | null, 
-  q: QuestionType
-): void {
-  let cardClass = 'country-card';
-  if (showValue && wasSelected) {
-    cardClass += isCorrect ? ' correct' : ' wrong';
+  #reset(): void {
+    if (!confirm('Reset all scores?')) return;
+    Object.assign(this.#state, EMPTY_STATS);
+    this.#persist();
+    this.#renderScore();
+    this.#nextRound();
   }
-  
-  card.className = cardClass;
-  card.innerHTML = `
-    <div class="country-flag">${country.flag}</div>
-    <div class="country-name">${country.name}</div>
-    ${showValue ? `<div class="value-reveal">${formatValue(q, country)}</div>` : ''}
-  `;
-}
 
-function nextRound(): void {
-  const question = QUESTIONS.find(q => q.id === state.selectedQuestionId) ?? QUESTIONS[0];
-  const pair = getRandomPair(question);
-  
-  if (!pair) {
-    questionText.textContent = 'Not enough data for this question type.';
-    return;
+  #toggleFeedback(): void {
+    this.#state.feedbackEnabled = !this.#state.feedbackEnabled;
+    this.#feedback.enabled = this.#state.feedbackEnabled;
+    this.#feedback.play('tap');
+    this.#renderFeedbackToggle();
+    this.#persist();
   }
-  
-  state.currentQuestion = question;
-  state.country1 = pair[0];
-  state.country2 = pair[1];
-  state.correctCountry = getCorrectAnswer(question, pair[0], pair[1]);
-  state.hasAnswered = false;
-  
-  questionText.textContent = question.template;
-  renderCard(country1Card, state.country1, false, false, null, question);
-  renderCard(country2Card, state.country2, false, false, null, question);
-  
-  resultMessage.className = 'result-message hidden';
-  nextBtn.classList.add('hidden');
-  
-  country1Card.onclick = () => selectCountry(state.country1!);
-  country2Card.onclick = () => selectCountry(state.country2!);
-}
 
-function selectCountry(selected: CountryData): void {
-  if (state.hasAnswered || !state.currentQuestion || !state.country1 || !state.country2 || !state.correctCountry) return;
-  
-  state.hasAnswered = true;
-  state.totalQuestions++;
-  
-  const isCorrect = selected.name === state.correctCountry.name;
-  const selectedCountry1 = selected.name === state.country1.name;
-  
-  if (isCorrect) {
-    state.correctAnswers++;
-    state.currentStreak++;
-    if (state.currentStreak > state.bestStreak) {
-      state.bestStreak = state.currentStreak;
-    }
-    resultMessage.textContent = '✓ Correct!';
-    resultMessage.className = 'result-message correct';
-  } else {
-    state.currentStreak = 0;
-    resultMessage.textContent = `✗ Wrong! ${state.correctCountry.name} was correct.`;
-    resultMessage.className = 'result-message wrong';
+  #persist(): void {
+    saveState(this.#state);
   }
-  
-  renderCard(country1Card, state.country1, true, selectedCountry1, selectedCountry1 ? isCorrect : null, state.currentQuestion);
-  renderCard(country2Card, state.country2, true, !selectedCountry1, !selectedCountry1 ? isCorrect : null, state.currentQuestion);
-  
-  country1Card.onclick = null;
-  country2Card.onclick = null;
-  
-  nextBtn.classList.remove('hidden');
-  updateScoreDisplay();
-  saveState();
+
+  #renderCard(card: HTMLButtonElement, country: Country, state: CardState): void {
+    const revealed = state !== 'pending';
+    card.hidden = false;
+    card.disabled = revealed;
+    card.className = state === 'correct' || state === 'wrong' ? `country-card ${state}` : 'country-card';
+
+    const flag = document.createElement('span');
+    flag.className = 'country-flag';
+    flag.textContent = country.flag;
+    flag.setAttribute('aria-hidden', 'true');
+
+    const name = document.createElement('span');
+    name.className = 'country-name';
+    name.textContent = country.name;
+
+    card.replaceChildren(flag, name);
+    if (revealed && this.#round) card.append(this.#valueElement(this.#round.metric, country));
+  }
+
+  #valueElement(metric: Metric, country: Country): HTMLElement {
+    const value = valueOf(metric, country);
+    const year = country.metrics[metric.id]?.year;
+    const element = document.createElement('span');
+    element.className = 'value-reveal';
+    element.textContent = value === undefined ? 'N/A' : `${metric.format(value)}${year ? ` (${year})` : ''}`;
+    return element;
+  }
+
+  #renderSelect(): void {
+    this.#select.replaceChildren(...this.#metrics.map(m => new Option(m.label, m.id, false, m.id === this.#metric.id)));
+  }
+
+  #renderFeedbackToggle(): void {
+    const on = this.#state.feedbackEnabled;
+    this.#feedbackToggle.textContent = on ? '🔊' : '🔇';
+    this.#feedbackToggle.setAttribute('aria-pressed', String(on));
+    this.#feedbackToggle.setAttribute('aria-label', on ? 'Sound and vibration on' : 'Sound and vibration off');
+    this.#feedbackToggle.title = this.#feedbackToggle.getAttribute('aria-label')!;
+  }
+
+  #renderScore(): void {
+    const s = this.#state;
+    this.#score.textContent = `${s.correctAnswers}/${s.totalQuestions}`;
+    this.#streak.textContent = s.currentStreak > 0 ? `🔥 ${s.currentStreak}` : '';
+    this.#best.textContent = s.bestStreak > 0 ? `⭐ Best: ${s.bestStreak}` : '';
+  }
 }
 
-function resetGame(): void {
-  if (!confirm('Reset all scores?')) return;
-  state.correctAnswers = 0;
-  state.totalQuestions = 0;
-  state.currentStreak = 0;
-  state.bestStreak = 0;
-  saveState();
-  updateScoreDisplay();
-  nextRound();
-}
+const registerServiceWorker = (): void => {
+  if (import.meta.env.PROD && 'serviceWorker' in navigator) {
+    void navigator.serviceWorker.register(`${import.meta.env.BASE_URL}sw.js`).catch(e => console.warn('Service worker registration failed:', e));
+  }
+};
 
-function initQuestionSelect(): void {
-  questionSelect.innerHTML = QUESTIONS.map(q => 
-    `<option value="${q.id}" ${q.id === state.selectedQuestionId ? 'selected' : ''}>${q.label}</option>`
-  ).join('');
-  
-  questionSelect.addEventListener('change', (e) => {
-    state.selectedQuestionId = (e.target as HTMLSelectElement).value;
-    saveState();
-    nextRound();
-  });
-}
-
-function init(): void {
-  document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
-    <div class="game-container">
-      <h1 class="game-title">🌍 Country Quiz</h1>
-      
-      <div class="controls">
-        <select id="question-select"></select>
-        <button id="reset-btn">Reset</button>
-      </div>
-      
-      <div class="score-display">
-        <span class="score">Score: <span id="score">0/0</span></span>
-        <span id="streak"></span>
-        <span id="best-streak"></span>
-      </div>
-      
-      <p id="question-text" class="question-text"></p>
-      
-      <div class="comparison-container">
-        <div id="country1" class="country-card"></div>
-        <div class="vs-badge">VS</div>
-        <div id="country2" class="country-card"></div>
-      </div>
-      
-      <div id="result-message" class="result-message hidden"></div>
-      
-      <button id="next-btn" class="next-btn hidden">Next →</button>
-    </div>
-  `;
-  
-  questionText = document.getElementById('question-text')!;
-  country1Card = document.getElementById('country1')!;
-  country2Card = document.getElementById('country2')!;
-  resultMessage = document.getElementById('result-message')!;
-  nextBtn = document.getElementById('next-btn')!;
-  scoreDisplay = document.getElementById('score')!;
-  streakDisplay = document.getElementById('streak')!;
-  bestStreakDisplay = document.getElementById('best-streak')!;
-  questionSelect = document.getElementById('question-select')!;
-  resetBtn = document.getElementById('reset-btn')!;
-  
-  loadState();
-  initQuestionSelect();
-  updateScoreDisplay();
-  
-  nextBtn.addEventListener('click', nextRound);
-  resetBtn.addEventListener('click', resetGame);
-  
-  nextRound();
-}
-
-document.addEventListener('DOMContentLoaded', init);
+document.addEventListener('DOMContentLoaded', () => {
+  new QuizApp(byId('app'));
+  registerServiceWorker();
+});
 
 
 ================================================================================
@@ -812,6 +4571,16 @@ FILE: src/style.css
 html, body {
   height: 100%;
   overflow: hidden;
+}
+
+button, select {
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+
+button:focus-visible, select:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
 }
 
 body {
@@ -919,12 +4688,31 @@ body {
   gap: 0.5rem;
   cursor: pointer;
   border: 2px solid transparent;
-  transition: all 0.2s;
+  color: inherit;
+  font: inherit;
+  transition: background 0.2s, transform 0.1s, border-color 0.2s;
 }
 
-.country-card:hover {
-  background: var(--card-hover);
-  transform: translateY(-2px);
+.country-card[hidden] {
+  display: none;
+}
+
+.country-card:disabled {
+  cursor: default;
+  opacity: 1;
+}
+
+@media (hover: hover) {
+  .country-card:not(:disabled):hover {
+    background: var(--card-hover);
+    transform: translateY(-2px);
+  }
+}
+
+.country-card:not(:disabled):active,
+.controls button:active,
+.next-btn:active {
+  transform: scale(0.96);
 }
 
 .country-card.correct {
@@ -996,7 +4784,7 @@ body {
   border: none;
   border-radius: 8px;
   cursor: pointer;
-  transition: background 0.2s;
+  transition: background 0.2s, transform 0.1s;
   flex-shrink: 0;
 }
 
@@ -1008,7 +4796,24 @@ body {
   visibility: hidden;
 }
 
-/* Mobile landscape */
+#feedback-btn {
+  min-width: 2.25rem;
+}
+
+.attribution {
+  font-size: 0.6rem;
+  color: var(--text-muted);
+  text-align: center;
+  flex-shrink: 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    transition: none !important;
+  }
+}
+
+@media (max-height: 500px) {
 @media (max-height: 500px) {
   .game-container {
     padding: 0.4rem;
@@ -1020,9 +4825,9 @@ body {
   .country-flag { font-size: 1.75rem; }
   .country-name { font-size: 0.75rem; }
   .next-btn { padding: 0.4rem 1rem; font-size: 0.9rem; }
+  .attribution { display: none; }
 }
 
-/* Small mobile */
 @media (max-width: 400px) {
   .comparison-container { gap: 0.5rem; }
   .country-card { max-width: 140px; padding: 0.75rem 0.4rem; }
@@ -1036,27 +4841,26 @@ FILE: tsconfig.json
 ================================================================================
 {
   "compilerOptions": {
-    "target": "ES2022",
+    "target": "ES2023",
     "useDefineForClassFields": true,
     "module": "ESNext",
-    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "lib": ["ES2023", "DOM", "DOM.Iterable"],
     "types": ["vite/client"],
     "skipLibCheck": true,
-
-    /* Bundler mode */
     "moduleResolution": "bundler",
     "allowImportingTsExtensions": true,
+    "resolveJsonModule": true,
     "verbatimModuleSyntax": true,
     "moduleDetection": "force",
     "noEmit": true,
-
-    /* Linting */
     "strict": true,
     "noUnusedLocals": true,
     "noUnusedParameters": true,
     "erasableSyntaxOnly": true,
     "noFallthroughCasesInSwitch": true,
-    "noUncheckedSideEffectImports": true
+    "noUncheckedSideEffectImports": true,
+    "noUncheckedIndexedAccess": true,
+    "exactOptionalPropertyTypes": true
   },
   "include": ["src"]
 }

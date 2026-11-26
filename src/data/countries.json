@@ -1,0 +1,2851 @@
+{
+  "countries": [
+    {
+      "iso2": "AF",
+      "name": "Afghanistan",
+      "region": "Asia",
+      "metrics": {
+        "population": {
+          "value": 42240000
+        },
+        "area": {
+          "value": 652230
+        },
+        "gdp": {
+          "value": 14580000000
+        },
+        "gdp_per_capita": {
+          "value": 345
+        },
+        "density": {
+          "value": 64.8
+        },
+        "literacy": {
+          "value": 37.3
+        },
+        "hdi": {
+          "value": 0.462
+        },
+        "life_expectancy": {
+          "value": 62
+        }
+      }
+    },
+    {
+      "iso2": "DZ",
+      "name": "Algeria",
+      "region": "Africa",
+      "metrics": {
+        "population": {
+          "value": 45400000
+        },
+        "area": {
+          "value": 2381741
+        },
+        "gdp": {
+          "value": 239900000000
+        },
+        "gdp_per_capita": {
+          "value": 5284
+        },
+        "gni_per_capita_ppp": {
+          "value": 13310
+        },
+        "density": {
+          "value": 19.1
+        },
+        "literacy": {
+          "value": 81.4
+        },
+        "hdi": {
+          "value": 0.745
+        },
+        "life_expectancy": {
+          "value": 76.4
+        }
+      }
+    },
+    {
+      "iso2": "AO",
+      "name": "Angola",
+      "region": "Africa",
+      "metrics": {
+        "population": {
+          "value": 36000000
+        },
+        "area": {
+          "value": 1246700
+        },
+        "gdp": {
+          "value": 92124000000
+        },
+        "gdp_per_capita": {
+          "value": 2560
+        },
+        "gni_per_capita_ppp": {
+          "value": 7250
+        },
+        "density": {
+          "value": 28.9
+        },
+        "literacy": {
+          "value": 72
+        },
+        "hdi": {
+          "value": 0.595
+        },
+        "life_expectancy": {
+          "value": 62
+        }
+      }
+    },
+    {
+      "iso2": "AR",
+      "name": "Argentina",
+      "region": "S. America",
+      "metrics": {
+        "population": {
+          "value": 46300000
+        },
+        "area": {
+          "value": 2780400
+        },
+        "gdp": {
+          "value": 641131000000
+        },
+        "gdp_per_capita": {
+          "value": 13846
+        },
+        "gni_per_capita_ppp": {
+          "value": 26390
+        },
+        "density": {
+          "value": 16.7
+        },
+        "literacy": {
+          "value": 99
+        },
+        "hdi": {
+          "value": 0.849
+        },
+        "life_expectancy": {
+          "value": 76.6
+        }
+      }
+    },
+    {
+      "iso2": "AU",
+      "name": "Australia",
+      "region": "Oceania",
+      "metrics": {
+        "population": {
+          "value": 26500000
+        },
+        "area": {
+          "value": 7692024
+        },
+        "gdp": {
+          "value": 1687713000000
+        },
+        "gdp_per_capita": {
+          "value": 63688
+        },
+        "gni_per_capita_ppp": {
+          "value": 59170
+        },
+        "density": {
+          "value": 3.4
+        },
+        "literacy": {
+          "value": 99
+        },
+        "hdi": {
+          "value": 0.946
+        },
+        "life_expectancy": {
+          "value": 84.5
+        }
+      }
+    },
+    {
+      "iso2": "AT",
+      "name": "Austria",
+      "region": "Europe",
+      "metrics": {
+        "population": {
+          "value": 9100000
+        },
+        "area": {
+          "value": 83879
+        },
+        "gdp": {
+          "value": 515768000000
+        },
+        "gdp_per_capita": {
+          "value": 56672
+        },
+        "gni_per_capita_ppp": {
+          "value": 66800
+        },
+        "density": {
+          "value": 108.5
+        },
+        "literacy": {
+          "value": 99
+        },
+        "hdi": {
+          "value": 0.926
+        },
+        "life_expectancy": {
+          "value": 82
+        }
+      }
+    },
+    {
+      "iso2": "BD",
+      "name": "Bangladesh",
+      "region": "Asia",
+      "metrics": {
+        "population": {
+          "value": 172000000
+        },
+        "area": {
+          "value": 147570
+        },
+        "gdp": {
+          "value": 460201000000
+        },
+        "gdp_per_capita": {
+          "value": 2676
+        },
+        "gni_per_capita_ppp": {
+          "value": 7040
+        },
+        "density": {
+          "value": 1166
+        },
+        "literacy": {
+          "value": 74.9
+        },
+        "hdi": {
+          "value": 0.67
+        },
+        "life_expectancy": {
+          "value": 72.4
+        }
+      }
+    },
+    {
+      "iso2": "BE",
+      "name": "Belgium",
+      "region": "Europe",
+      "metrics": {
+        "population": {
+          "value": 11700000
+        },
+        "area": {
+          "value": 30528
+        },
+        "gdp": {
+          "value": 609887000000
+        },
+        "gdp_per_capita": {
+          "value": 52133
+        },
+        "gni_per_capita_ppp": {
+          "value": 65430
+        },
+        "density": {
+          "value": 383.3
+        },
+        "literacy": {
+          "value": 99
+        },
+        "hdi": {
+          "value": 0.942
+        },
+        "life_expectancy": {
+          "value": 82.2
+        }
+      }
+    },
+    {
+      "iso2": "BJ",
+      "name": "Benin",
+      "region": "Africa",
+      "metrics": {
+        "population": {
+          "value": 13700000
+        },
+        "area": {
+          "value": 112622
+        },
+        "gdp": {
+          "value": 19234000000
+        },
+        "gdp_per_capita": {
+          "value": 1404
+        },
+        "gni_per_capita_ppp": {
+          "value": 4030
+        },
+        "density": {
+          "value": 121.7
+        },
+        "literacy": {
+          "value": 45.8
+        },
+        "hdi": {
+          "value": 0.504
+        },
+        "life_expectancy": {
+          "value": 60
+        }
+      }
+    },
+    {
+      "iso2": "BO",
+      "name": "Bolivia",
+      "region": "S. America",
+      "metrics": {
+        "population": {
+          "value": 12400000
+        },
+        "area": {
+          "value": 1098581
+        },
+        "gdp": {
+          "value": 44315000000
+        },
+        "gdp_per_capita": {
+          "value": 3574
+        },
+        "gni_per_capita_ppp": {
+          "value": 9540
+        },
+        "density": {
+          "value": 11.3
+        },
+        "literacy": {
+          "value": 94.5
+        },
+        "hdi": {
+          "value": 0.692
+        },
+        "life_expectancy": {
+          "value": 63.6
+        }
+      }
+    },
+    {
+      "iso2": "BW",
+      "name": "Botswana",
+      "region": "Africa",
+      "metrics": {
+        "population": {
+          "value": 2600000
+        },
+        "area": {
+          "value": 581730
+        },
+        "gdp": {
+          "value": 19396000000
+        },
+        "gdp_per_capita": {
+          "value": 7460
+        },
+        "gni_per_capita_ppp": {
+          "value": 18600
+        },
+        "density": {
+          "value": 4.5
+        },
+        "literacy": {
+          "value": 88.9
+        },
+        "hdi": {
+          "value": 0.708
+        },
+        "life_expectancy": {
+          "value": 61.1
+        }
+      }
+    },
+    {
+      "iso2": "BR",
+      "name": "Brazil",
+      "region": "S. America",
+      "metrics": {
+        "population": {
+          "value": 216400000
+        },
+        "area": {
+          "value": 8515767
+        },
+        "gdp": {
+          "value": 2173668000000
+        },
+        "gdp_per_capita": {
+          "value": 10047
+        },
+        "gni_per_capita_ppp": {
+          "value": 17000
+        },
+        "density": {
+          "value": 25.4
+        },
+        "literacy": {
+          "value": 93.5
+        },
+        "hdi": {
+          "value": 0.76
+        },
+        "life_expectancy": {
+          "value": 72.8
+        }
+      }
+    },
+    {
+      "iso2": "BF",
+      "name": "Burkina Faso",
+      "region": "Africa",
+      "metrics": {
+        "population": {
+          "value": 23000000
+        },
+        "area": {
+          "value": 274200
+        },
+        "gdp": {
+          "value": 20327000000
+        },
+        "gdp_per_capita": {
+          "value": 884
+        },
+        "gni_per_capita_ppp": {
+          "value": 2310
+        },
+        "density": {
+          "value": 83.9
+        },
+        "literacy": {
+          "value": 34.5
+        },
+        "hdi": {
+          "value": 0.438
+        },
+        "life_expectancy": {
+          "value": 59.3
+        }
+      }
+    },
+    {
+      "iso2": "CM",
+      "name": "Cameroon",
+      "region": "Africa",
+      "metrics": {
+        "population": {
+          "value": 28600000
+        },
+        "area": {
+          "value": 475442
+        },
+        "gdp": {
+          "value": 48455000000
+        },
+        "gdp_per_capita": {
+          "value": 1694
+        },
+        "gni_per_capita_ppp": {
+          "value": 4220
+        },
+        "density": {
+          "value": 60.2
+        },
+        "literacy": {
+          "value": 77.1
+        },
+        "hdi": {
+          "value": 0.587
+        },
+        "life_expectancy": {
+          "value": 61
+        }
+      }
+    },
+    {
+      "iso2": "CA",
+      "name": "Canada",
+      "region": "N. America",
+      "metrics": {
+        "population": {
+          "value": 40100000
+        },
+        "area": {
+          "value": 9984670
+        },
+        "gdp": {
+          "value": 2139840000000
+        },
+        "gdp_per_capita": {
+          "value": 53385
+        },
+        "gni_per_capita_ppp": {
+          "value": 58040
+        },
+        "density": {
+          "value": 4
+        },
+        "literacy": {
+          "value": 99
+        },
+        "hdi": {
+          "value": 0.935
+        },
+        "life_expectancy": {
+          "value": 82.7
+        }
+      }
+    },
+    {
+      "iso2": "CL",
+      "name": "Chile",
+      "region": "S. America",
+      "metrics": {
+        "population": {
+          "value": 19500000
+        },
+        "area": {
+          "value": 756102
+        },
+        "gdp": {
+          "value": 335533000000
+        },
+        "gdp_per_capita": {
+          "value": 17206
+        },
+        "gni_per_capita_ppp": {
+          "value": 28510
+        },
+        "density": {
+          "value": 25.8
+        },
+        "literacy": {
+          "value": 97
+        },
+        "hdi": {
+          "value": 0.86
+        },
+        "life_expectancy": {
+          "value": 78.9
+        }
+      }
+    },
+    {
+      "iso2": "CN",
+      "name": "China",
+      "region": "Asia",
+      "metrics": {
+        "population": {
+          "value": 1412000000
+        },
+        "area": {
+          "value": 9596960
+        },
+        "gdp": {
+          "value": 17963171000000
+        },
+        "gdp_per_capita": {
+          "value": 12720
+        },
+        "gni_per_capita_ppp": {
+          "value": 23310
+        },
+        "density": {
+          "value": 147
+        },
+        "literacy": {
+          "value": 97.5
+        },
+        "hdi": {
+          "value": 0.788
+        },
+        "life_expectancy": {
+          "value": 78.2
+        }
+      }
+    },
+    {
+      "iso2": "CO",
+      "name": "Colombia",
+      "region": "S. America",
+      "metrics": {
+        "population": {
+          "value": 52000000
+        },
+        "area": {
+          "value": 1138910
+        },
+        "gdp": {
+          "value": 363835000000
+        },
+        "gdp_per_capita": {
+          "value": 6997
+        },
+        "gni_per_capita_ppp": {
+          "value": 18180
+        },
+        "density": {
+          "value": 45.7
+        },
+        "literacy": {
+          "value": 95.6
+        },
+        "hdi": {
+          "value": 0.758
+        },
+        "life_expectancy": {
+          "value": 72.8
+        }
+      }
+    },
+    {
+      "iso2": "CR",
+      "name": "Costa Rica",
+      "region": "N. America",
+      "metrics": {
+        "population": {
+          "value": 5200000
+        },
+        "area": {
+          "value": 51100
+        },
+        "gdp": {
+          "value": 68379000000
+        },
+        "gdp_per_capita": {
+          "value": 13150
+        },
+        "gni_per_capita_ppp": {
+          "value": 24420
+        },
+        "density": {
+          "value": 101.8
+        },
+        "literacy": {
+          "value": 97.9
+        },
+        "hdi": {
+          "value": 0.806
+        },
+        "life_expectancy": {
+          "value": 77
+        }
+      }
+    },
+    {
+      "iso2": "CU",
+      "name": "Cuba",
+      "region": "N. America",
+      "metrics": {
+        "population": {
+          "value": 11100000
+        },
+        "area": {
+          "value": 109884
+        },
+        "gdp": {
+          "value": 107352000000
+        },
+        "gdp_per_capita": {
+          "value": 9671
+        },
+        "density": {
+          "value": 101
+        },
+        "literacy": {
+          "value": 99.8
+        },
+        "hdi": {
+          "value": 0.783
+        },
+        "life_expectancy": {
+          "value": 73.7
+        }
+      }
+    },
+    {
+      "iso2": "CZ",
+      "name": "Czech Republic",
+      "region": "Europe",
+      "metrics": {
+        "population": {
+          "value": 10500000
+        },
+        "area": {
+          "value": 78867
+        },
+        "gdp": {
+          "value": 330860000000
+        },
+        "gdp_per_capita": {
+          "value": 31510
+        },
+        "gni_per_capita_ppp": {
+          "value": 49100
+        },
+        "density": {
+          "value": 133.2
+        },
+        "literacy": {
+          "value": 99
+        },
+        "hdi": {
+          "value": 0.889
+        },
+        "life_expectancy": {
+          "value": 79.3
+        }
+      }
+    },
+    {
+      "iso2": "CD",
+      "name": "DR Congo",
+      "region": "Africa",
+      "metrics": {
+        "population": {
+          "value": 102300000
+        },
+        "area": {
+          "value": 2344858
+        },
+        "gdp": {
+          "value": 66380000000
+        },
+        "gdp_per_capita": {
+          "value": 649
+        },
+        "gni_per_capita_ppp": {
+          "value": 1430
+        },
+        "density": {
+          "value": 43.6
+        },
+        "literacy": {
+          "value": 80
+        },
+        "hdi": {
+          "value": 0.479
+        },
+        "life_expectancy": {
+          "value": 60.7
+        }
+      }
+    },
+    {
+      "iso2": "DK",
+      "name": "Denmark",
+      "region": "Europe",
+      "metrics": {
+        "population": {
+          "value": 5900000
+        },
+        "area": {
+          "value": 43094
+        },
+        "gdp": {
+          "value": 405626000000
+        },
+        "gdp_per_capita": {
+          "value": 68750
+        },
+        "gni_per_capita_ppp": {
+          "value": 72680
+        },
+        "density": {
+          "value": 137
+        },
+        "literacy": {
+          "value": 99
+        },
+        "hdi": {
+          "value": 0.952
+        },
+        "life_expectancy": {
+          "value": 81.4
+        }
+      }
+    },
+    {
+      "iso2": "DO",
+      "name": "Dominican Rep.",
+      "region": "N. America",
+      "metrics": {
+        "population": {
+          "value": 11300000
+        },
+        "area": {
+          "value": 48671
+        },
+        "gdp": {
+          "value": 113642000000
+        },
+        "gdp_per_capita": {
+          "value": 10057
+        },
+        "gni_per_capita_ppp": {
+          "value": 22760
+        },
+        "density": {
+          "value": 232.2
+        },
+        "literacy": {
+          "value": 95
+        },
+        "hdi": {
+          "value": 0.768
+        },
+        "life_expectancy": {
+          "value": 72.6
+        }
+      }
+    },
+    {
+      "iso2": "EC",
+      "name": "Ecuador",
+      "region": "S. America",
+      "metrics": {
+        "population": {
+          "value": 18000000
+        },
+        "area": {
+          "value": 283561
+        },
+        "gdp": {
+          "value": 118845000000
+        },
+        "gdp_per_capita": {
+          "value": 6603
+        },
+        "gni_per_capita_ppp": {
+          "value": 12930
+        },
+        "density": {
+          "value": 63.5
+        },
+        "literacy": {
+          "value": 94.5
+        },
+        "hdi": {
+          "value": 0.765
+        },
+        "life_expectancy": {
+          "value": 74.3
+        }
+      }
+    },
+    {
+      "iso2": "EG",
+      "name": "Egypt",
+      "region": "Africa",
+      "metrics": {
+        "population": {
+          "value": 105000000
+        },
+        "area": {
+          "value": 1001450
+        },
+        "gdp": {
+          "value": 387086000000
+        },
+        "gdp_per_capita": {
+          "value": 3686
+        },
+        "gni_per_capita_ppp": {
+          "value": 16450
+        },
+        "density": {
+          "value": 104.9
+        },
+        "literacy": {
+          "value": 73.1
+        },
+        "hdi": {
+          "value": 0.728
+        },
+        "life_expectancy": {
+          "value": 70.2
+        }
+      }
+    },
+    {
+      "iso2": "ET",
+      "name": "Ethiopia",
+      "region": "Africa",
+      "metrics": {
+        "population": {
+          "value": 126500000
+        },
+        "area": {
+          "value": 1104300
+        },
+        "gdp": {
+          "value": 163698000000
+        },
+        "gdp_per_capita": {
+          "value": 1294
+        },
+        "gni_per_capita_ppp": {
+          "value": 3070
+        },
+        "density": {
+          "value": 114.6
+        },
+        "literacy": {
+          "value": 51.8
+        },
+        "hdi": {
+          "value": 0.492
+        },
+        "life_expectancy": {
+          "value": 65
+        }
+      }
+    },
+    {
+      "iso2": "FJ",
+      "name": "Fiji",
+      "region": "Oceania",
+      "metrics": {
+        "population": {
+          "value": 930000
+        },
+        "area": {
+          "value": 18274
+        },
+        "gdp": {
+          "value": 5314000000
+        },
+        "gdp_per_capita": {
+          "value": 5714
+        },
+        "gni_per_capita_ppp": {
+          "value": 14570
+        },
+        "density": {
+          "value": 50.9
+        },
+        "literacy": {
+          "value": 99.1
+        },
+        "hdi": {
+          "value": 0.729
+        },
+        "life_expectancy": {
+          "value": 67.4
+        }
+      }
+    },
+    {
+      "iso2": "FI",
+      "name": "Finland",
+      "region": "Europe",
+      "metrics": {
+        "population": {
+          "value": 5550000
+        },
+        "area": {
+          "value": 338424
+        },
+        "gdp": {
+          "value": 300186000000
+        },
+        "gdp_per_capita": {
+          "value": 54090
+        },
+        "gni_per_capita_ppp": {
+          "value": 58580
+        },
+        "density": {
+          "value": 16.4
+        },
+        "literacy": {
+          "value": 99
+        },
+        "hdi": {
+          "value": 0.942
+        },
+        "life_expectancy": {
+          "value": 82
+        }
+      }
+    },
+    {
+      "iso2": "FR",
+      "name": "France",
+      "region": "Europe",
+      "metrics": {
+        "population": {
+          "value": 68000000
+        },
+        "area": {
+          "value": 643801
+        },
+        "gdp": {
+          "value": 2923489000000
+        },
+        "gdp_per_capita": {
+          "value": 43000
+        },
+        "gni_per_capita_ppp": {
+          "value": 55080
+        },
+        "density": {
+          "value": 105.6
+        },
+        "literacy": {
+          "value": 99
+        },
+        "hdi": {
+          "value": 0.903
+        },
+        "life_expectancy": {
+          "value": 82.5
+        }
+      }
+    },
+    {
+      "iso2": "DE",
+      "name": "Germany",
+      "region": "Europe",
+      "metrics": {
+        "population": {
+          "value": 84400000
+        },
+        "area": {
+          "value": 357022
+        },
+        "gdp": {
+          "value": 4308854000000
+        },
+        "gdp_per_capita": {
+          "value": 51072
+        },
+        "gni_per_capita_ppp": {
+          "value": 63150
+        },
+        "density": {
+          "value": 236.4
+        },
+        "literacy": {
+          "value": 99
+        },
+        "hdi": {
+          "value": 0.95
+        },
+        "life_expectancy": {
+          "value": 81.7
+        }
+      }
+    },
+    {
+      "iso2": "GH",
+      "name": "Ghana",
+      "region": "Africa",
+      "metrics": {
+        "population": {
+          "value": 34100000
+        },
+        "area": {
+          "value": 238533
+        },
+        "gdp": {
+          "value": 76370000000
+        },
+        "gdp_per_capita": {
+          "value": 2240
+        },
+        "gni_per_capita_ppp": {
+          "value": 5870
+        },
+        "density": {
+          "value": 143
+        },
+        "literacy": {
+          "value": 79
+        },
+        "hdi": {
+          "value": 0.602
+        },
+        "life_expectancy": {
+          "value": 63.8
+        }
+      }
+    },
+    {
+      "iso2": "GR",
+      "name": "Greece",
+      "region": "Europe",
+      "metrics": {
+        "population": {
+          "value": 10430000
+        },
+        "area": {
+          "value": 131957
+        },
+        "gdp": {
+          "value": 239300000000
+        },
+        "gdp_per_capita": {
+          "value": 22942
+        },
+        "gni_per_capita_ppp": {
+          "value": 38050
+        },
+        "density": {
+          "value": 79
+        },
+        "literacy": {
+          "value": 97.9
+        },
+        "hdi": {
+          "value": 0.887
+        },
+        "life_expectancy": {
+          "value": 80.1
+        }
+      }
+    },
+    {
+      "iso2": "GT",
+      "name": "Guatemala",
+      "region": "N. America",
+      "metrics": {
+        "population": {
+          "value": 17600000
+        },
+        "area": {
+          "value": 108889
+        },
+        "gdp": {
+          "value": 95003000000
+        },
+        "gdp_per_capita": {
+          "value": 5398
+        },
+        "gni_per_capita_ppp": {
+          "value": 10250
+        },
+        "density": {
+          "value": 161.7
+        },
+        "literacy": {
+          "value": 83.3
+        },
+        "hdi": {
+          "value": 0.627
+        },
+        "life_expectancy": {
+          "value": 69.2
+        }
+      }
+    },
+    {
+      "iso2": "HT",
+      "name": "Haiti",
+      "region": "N. America",
+      "metrics": {
+        "population": {
+          "value": 11700000
+        },
+        "area": {
+          "value": 27750
+        },
+        "gdp": {
+          "value": 21178000000
+        },
+        "gdp_per_capita": {
+          "value": 1810
+        },
+        "gni_per_capita_ppp": {
+          "value": 3110
+        },
+        "density": {
+          "value": 421.6
+        },
+        "literacy": {
+          "value": 61.7
+        },
+        "hdi": {
+          "value": 0.552
+        },
+        "life_expectancy": {
+          "value": 64
+        }
+      }
+    },
+    {
+      "iso2": "HN",
+      "name": "Honduras",
+      "region": "N. America",
+      "metrics": {
+        "population": {
+          "value": 10400000
+        },
+        "area": {
+          "value": 112492
+        },
+        "gdp": {
+          "value": 31717000000
+        },
+        "gdp_per_capita": {
+          "value": 3050
+        },
+        "gni_per_capita_ppp": {
+          "value": 6340
+        },
+        "density": {
+          "value": 92.5
+        },
+        "literacy": {
+          "value": 87.2
+        },
+        "hdi": {
+          "value": 0.624
+        },
+        "life_expectancy": {
+          "value": 70.1
+        }
+      }
+    },
+    {
+      "iso2": "HU",
+      "name": "Hungary",
+      "region": "Europe",
+      "metrics": {
+        "population": {
+          "value": 9600000
+        },
+        "area": {
+          "value": 93028
+        },
+        "gdp": {
+          "value": 212384000000
+        },
+        "gdp_per_capita": {
+          "value": 22122
+        },
+        "gni_per_capita_ppp": {
+          "value": 40680
+        },
+        "density": {
+          "value": 103.2
+        },
+        "literacy": {
+          "value": 99.4
+        },
+        "hdi": {
+          "value": 0.851
+        },
+        "life_expectancy": {
+          "value": 74.5
+        }
+      }
+    },
+    {
+      "iso2": "IN",
+      "name": "India",
+      "region": "Asia",
+      "metrics": {
+        "population": {
+          "value": 1428000000
+        },
+        "area": {
+          "value": 3287263
+        },
+        "gdp": {
+          "value": 3737000000000
+        },
+        "gdp_per_capita": {
+          "value": 2617
+        },
+        "gni_per_capita_ppp": {
+          "value": 8400
+        },
+        "density": {
+          "value": 434
+        },
+        "literacy": {
+          "value": 74.4
+        },
+        "hdi": {
+          "value": 0.644
+        },
+        "life_expectancy": {
+          "value": 67.2
+        }
+      }
+    },
+    {
+      "iso2": "ID",
+      "name": "Indonesia",
+      "region": "Asia",
+      "metrics": {
+        "population": {
+          "value": 277500000
+        },
+        "area": {
+          "value": 1904569
+        },
+        "gdp": {
+          "value": 1417387000000
+        },
+        "gdp_per_capita": {
+          "value": 5108
+        },
+        "gni_per_capita_ppp": {
+          "value": 15850
+        },
+        "density": {
+          "value": 145.7
+        },
+        "literacy": {
+          "value": 96
+        },
+        "hdi": {
+          "value": 0.713
+        },
+        "life_expectancy": {
+          "value": 67.6
+        }
+      }
+    },
+    {
+      "iso2": "IR",
+      "name": "Iran",
+      "region": "Asia",
+      "metrics": {
+        "population": {
+          "value": 89200000
+        },
+        "area": {
+          "value": 1648195
+        },
+        "gdp": {
+          "value": 388000000000
+        },
+        "gdp_per_capita": {
+          "value": 4351
+        },
+        "gni_per_capita_ppp": {
+          "value": 16750
+        },
+        "density": {
+          "value": 54.1
+        },
+        "literacy": {
+          "value": 88.7
+        },
+        "hdi": {
+          "value": 0.774
+        },
+        "life_expectancy": {
+          "value": 73.9
+        }
+      }
+    },
+    {
+      "iso2": "IQ",
+      "name": "Iraq",
+      "region": "Asia",
+      "metrics": {
+        "population": {
+          "value": 44500000
+        },
+        "area": {
+          "value": 438317
+        },
+        "gdp": {
+          "value": 267900000000
+        },
+        "gdp_per_capita": {
+          "value": 6021
+        },
+        "gni_per_capita_ppp": {
+          "value": 11510
+        },
+        "density": {
+          "value": 101.5
+        },
+        "literacy": {
+          "value": 85.6
+        },
+        "hdi": {
+          "value": 0.686
+        },
+        "life_expectancy": {
+          "value": 70.4
+        }
+      }
+    },
+    {
+      "iso2": "IE",
+      "name": "Ireland",
+      "region": "Europe",
+      "metrics": {
+        "population": {
+          "value": 5200000
+        },
+        "area": {
+          "value": 70273
+        },
+        "gdp": {
+          "value": 594095000000
+        },
+        "gdp_per_capita": {
+          "value": 114249
+        },
+        "gni_per_capita_ppp": {
+          "value": 87260
+        },
+        "density": {
+          "value": 74
+        },
+        "literacy": {
+          "value": 99
+        },
+        "hdi": {
+          "value": 0.95
+        },
+        "life_expectancy": {
+          "value": 82
+        }
+      }
+    },
+    {
+      "iso2": "IL",
+      "name": "Israel",
+      "region": "Asia",
+      "metrics": {
+        "population": {
+          "value": 9750000
+        },
+        "area": {
+          "value": 20770
+        },
+        "gdp": {
+          "value": 525000000000
+        },
+        "gdp_per_capita": {
+          "value": 53853
+        },
+        "gni_per_capita_ppp": {
+          "value": 47580
+        },
+        "density": {
+          "value": 470
+        },
+        "literacy": {
+          "value": 97.8
+        },
+        "hdi": {
+          "value": 0.915
+        },
+        "life_expectancy": {
+          "value": 82.6
+        }
+      }
+    },
+    {
+      "iso2": "IT",
+      "name": "Italy",
+      "region": "Europe",
+      "metrics": {
+        "population": {
+          "value": 58900000
+        },
+        "area": {
+          "value": 301340
+        },
+        "gdp": {
+          "value": 2169745000000
+        },
+        "gdp_per_capita": {
+          "value": 36834
+        },
+        "gni_per_capita_ppp": {
+          "value": 52710
+        },
+        "density": {
+          "value": 195.4
+        },
+        "literacy": {
+          "value": 99.4
+        },
+        "hdi": {
+          "value": 0.906
+        },
+        "life_expectancy": {
+          "value": 83.5
+        }
+      }
+    },
+    {
+      "iso2": "JM",
+      "name": "Jamaica",
+      "region": "N. America",
+      "metrics": {
+        "population": {
+          "value": 2800000
+        },
+        "area": {
+          "value": 10991
+        },
+        "gdp": {
+          "value": 17099000000
+        },
+        "gdp_per_capita": {
+          "value": 6107
+        },
+        "gni_per_capita_ppp": {
+          "value": 11290
+        },
+        "density": {
+          "value": 254.8
+        },
+        "literacy": {
+          "value": 88.7
+        },
+        "hdi": {
+          "value": 0.709
+        },
+        "life_expectancy": {
+          "value": 70.5
+        }
+      }
+    },
+    {
+      "iso2": "JP",
+      "name": "Japan",
+      "region": "Asia",
+      "metrics": {
+        "population": {
+          "value": 124500000
+        },
+        "area": {
+          "value": 377975
+        },
+        "gdp": {
+          "value": 4230862000000
+        },
+        "gdp_per_capita": {
+          "value": 33960
+        },
+        "gni_per_capita_ppp": {
+          "value": 49240
+        },
+        "density": {
+          "value": 329.6
+        },
+        "literacy": {
+          "value": 99
+        },
+        "hdi": {
+          "value": 0.92
+        },
+        "life_expectancy": {
+          "value": 84.8
+        }
+      }
+    },
+    {
+      "iso2": "KE",
+      "name": "Kenya",
+      "region": "Africa",
+      "metrics": {
+        "population": {
+          "value": 55100000
+        },
+        "area": {
+          "value": 580367
+        },
+        "gdp": {
+          "value": 113420000000
+        },
+        "gdp_per_capita": {
+          "value": 2058
+        },
+        "gni_per_capita_ppp": {
+          "value": 5720
+        },
+        "density": {
+          "value": 95
+        },
+        "literacy": {
+          "value": 82.6
+        },
+        "hdi": {
+          "value": 0.575
+        },
+        "life_expectancy": {
+          "value": 61.4
+        }
+      }
+    },
+    {
+      "iso2": "MY",
+      "name": "Malaysia",
+      "region": "Asia",
+      "metrics": {
+        "population": {
+          "value": 34300000
+        },
+        "area": {
+          "value": 330803
+        },
+        "gdp": {
+          "value": 430895000000
+        },
+        "gdp_per_capita": {
+          "value": 12563
+        },
+        "gni_per_capita_ppp": {
+          "value": 33550
+        },
+        "density": {
+          "value": 103.7
+        },
+        "literacy": {
+          "value": 95.9
+        },
+        "hdi": {
+          "value": 0.807
+        },
+        "life_expectancy": {
+          "value": 74.9
+        }
+      }
+    },
+    {
+      "iso2": "MX",
+      "name": "Mexico",
+      "region": "N. America",
+      "metrics": {
+        "population": {
+          "value": 128900000
+        },
+        "area": {
+          "value": 1964375
+        },
+        "gdp": {
+          "value": 1811468000000
+        },
+        "gdp_per_capita": {
+          "value": 14056
+        },
+        "gni_per_capita_ppp": {
+          "value": 22410
+        },
+        "density": {
+          "value": 65.6
+        },
+        "literacy": {
+          "value": 95.4
+        },
+        "hdi": {
+          "value": 0.781
+        },
+        "life_expectancy": {
+          "value": 75
+        }
+      }
+    },
+    {
+      "iso2": "MA",
+      "name": "Morocco",
+      "region": "Africa",
+      "metrics": {
+        "population": {
+          "value": 37500000
+        },
+        "area": {
+          "value": 446550
+        },
+        "gdp": {
+          "value": 141109000000
+        },
+        "gdp_per_capita": {
+          "value": 3764
+        },
+        "gni_per_capita_ppp": {
+          "value": 9140
+        },
+        "density": {
+          "value": 84
+        },
+        "literacy": {
+          "value": 75.9
+        },
+        "hdi": {
+          "value": 0.698
+        },
+        "life_expectancy": {
+          "value": 74
+        }
+      }
+    },
+    {
+      "iso2": "NL",
+      "name": "Netherlands",
+      "region": "Europe",
+      "metrics": {
+        "population": {
+          "value": 17800000
+        },
+        "area": {
+          "value": 41543
+        },
+        "gdp": {
+          "value": 1009000000000
+        },
+        "gdp_per_capita": {
+          "value": 56693
+        },
+        "gni_per_capita_ppp": {
+          "value": 70930
+        },
+        "density": {
+          "value": 428.5
+        },
+        "literacy": {
+          "value": 99
+        },
+        "hdi": {
+          "value": 0.946
+        },
+        "life_expectancy": {
+          "value": 82.4
+        }
+      }
+    },
+    {
+      "iso2": "NZ",
+      "name": "New Zealand",
+      "region": "Oceania",
+      "metrics": {
+        "population": {
+          "value": 5200000
+        },
+        "area": {
+          "value": 270467
+        },
+        "gdp": {
+          "value": 251969000000
+        },
+        "gdp_per_capita": {
+          "value": 48455
+        },
+        "gni_per_capita_ppp": {
+          "value": 52000
+        },
+        "density": {
+          "value": 19.2
+        },
+        "literacy": {
+          "value": 99
+        },
+        "hdi": {
+          "value": 0.939
+        },
+        "life_expectancy": {
+          "value": 82.5
+        }
+      }
+    },
+    {
+      "iso2": "NI",
+      "name": "Nicaragua",
+      "region": "N. America",
+      "metrics": {
+        "population": {
+          "value": 7050000
+        },
+        "area": {
+          "value": 130373
+        },
+        "gdp": {
+          "value": 15787000000
+        },
+        "gdp_per_capita": {
+          "value": 2239
+        },
+        "gni_per_capita_ppp": {
+          "value": 6220
+        },
+        "density": {
+          "value": 54.1
+        },
+        "literacy": {
+          "value": 82.6
+        },
+        "hdi": {
+          "value": 0.667
+        },
+        "life_expectancy": {
+          "value": 74.5
+        }
+      }
+    },
+    {
+      "iso2": "NG",
+      "name": "Nigeria",
+      "region": "Africa",
+      "metrics": {
+        "population": {
+          "value": 223800000
+        },
+        "area": {
+          "value": 923768
+        },
+        "gdp": {
+          "value": 472620000000
+        },
+        "gdp_per_capita": {
+          "value": 2112
+        },
+        "gni_per_capita_ppp": {
+          "value": 5860
+        },
+        "density": {
+          "value": 242.3
+        },
+        "literacy": {
+          "value": 62
+        },
+        "hdi": {
+          "value": 0.548
+        },
+        "life_expectancy": {
+          "value": 52.7
+        }
+      }
+    },
+    {
+      "iso2": "NO",
+      "name": "Norway",
+      "region": "Europe",
+      "metrics": {
+        "population": {
+          "value": 5500000
+        },
+        "area": {
+          "value": 323802
+        },
+        "gdp": {
+          "value": 546768000000
+        },
+        "gdp_per_capita": {
+          "value": 99412
+        },
+        "gni_per_capita_ppp": {
+          "value": 89100
+        },
+        "density": {
+          "value": 17
+        },
+        "literacy": {
+          "value": 99
+        },
+        "hdi": {
+          "value": 0.966
+        },
+        "life_expectancy": {
+          "value": 83.2
+        }
+      }
+    },
+    {
+      "iso2": "PK",
+      "name": "Pakistan",
+      "region": "Asia",
+      "metrics": {
+        "population": {
+          "value": 240500000
+        },
+        "area": {
+          "value": 881912
+        },
+        "gdp": {
+          "value": 376493000000
+        },
+        "gdp_per_capita": {
+          "value": 1565
+        },
+        "gni_per_capita_ppp": {
+          "value": 6530
+        },
+        "density": {
+          "value": 272.8
+        },
+        "literacy": {
+          "value": 58
+        },
+        "hdi": {
+          "value": 0.544
+        },
+        "life_expectancy": {
+          "value": 66.1
+        }
+      }
+    },
+    {
+      "iso2": "PA",
+      "name": "Panama",
+      "region": "N. America",
+      "metrics": {
+        "population": {
+          "value": 4400000
+        },
+        "area": {
+          "value": 75420
+        },
+        "gdp": {
+          "value": 76523000000
+        },
+        "gdp_per_capita": {
+          "value": 17391
+        },
+        "gni_per_capita_ppp": {
+          "value": 32980
+        },
+        "density": {
+          "value": 58.3
+        },
+        "literacy": {
+          "value": 95.7
+        },
+        "hdi": {
+          "value": 0.82
+        },
+        "life_expectancy": {
+          "value": 76.2
+        }
+      }
+    },
+    {
+      "iso2": "PG",
+      "name": "Papua New Guinea",
+      "region": "Oceania",
+      "metrics": {
+        "population": {
+          "value": 10300000
+        },
+        "area": {
+          "value": 462840
+        },
+        "gdp": {
+          "value": 30624000000
+        },
+        "gdp_per_capita": {
+          "value": 2973
+        },
+        "gni_per_capita_ppp": {
+          "value": 4620
+        },
+        "density": {
+          "value": 22.3
+        },
+        "literacy": {
+          "value": 64.2
+        },
+        "hdi": {
+          "value": 0.558
+        },
+        "life_expectancy": {
+          "value": 64.5
+        }
+      }
+    },
+    {
+      "iso2": "PY",
+      "name": "Paraguay",
+      "region": "S. America",
+      "metrics": {
+        "population": {
+          "value": 6800000
+        },
+        "area": {
+          "value": 406752
+        },
+        "gdp": {
+          "value": 42956000000
+        },
+        "gdp_per_capita": {
+          "value": 6317
+        },
+        "gni_per_capita_ppp": {
+          "value": 15030
+        },
+        "density": {
+          "value": 16.7
+        },
+        "literacy": {
+          "value": 94.7
+        },
+        "hdi": {
+          "value": 0.717
+        },
+        "life_expectancy": {
+          "value": 70.3
+        }
+      }
+    },
+    {
+      "iso2": "PE",
+      "name": "Peru",
+      "region": "S. America",
+      "metrics": {
+        "population": {
+          "value": 34000000
+        },
+        "area": {
+          "value": 1285216
+        },
+        "gdp": {
+          "value": 267603000000
+        },
+        "gdp_per_capita": {
+          "value": 7869
+        },
+        "gni_per_capita_ppp": {
+          "value": 15310
+        },
+        "density": {
+          "value": 26.4
+        },
+        "literacy": {
+          "value": 94.5
+        },
+        "hdi": {
+          "value": 0.762
+        },
+        "life_expectancy": {
+          "value": 73.7
+        }
+      }
+    },
+    {
+      "iso2": "PH",
+      "name": "Philippines",
+      "region": "Asia",
+      "metrics": {
+        "population": {
+          "value": 117300000
+        },
+        "area": {
+          "value": 300000
+        },
+        "gdp": {
+          "value": 435667000000
+        },
+        "gdp_per_capita": {
+          "value": 3715
+        },
+        "gni_per_capita_ppp": {
+          "value": 10590
+        },
+        "density": {
+          "value": 391
+        },
+        "literacy": {
+          "value": 96.3
+        },
+        "hdi": {
+          "value": 0.71
+        },
+        "life_expectancy": {
+          "value": 69.3
+        }
+      }
+    },
+    {
+      "iso2": "PL",
+      "name": "Poland",
+      "region": "Europe",
+      "metrics": {
+        "population": {
+          "value": 37600000
+        },
+        "area": {
+          "value": 312679
+        },
+        "gdp": {
+          "value": 811229000000
+        },
+        "gdp_per_capita": {
+          "value": 21574
+        },
+        "gni_per_capita_ppp": {
+          "value": 41370
+        },
+        "density": {
+          "value": 120.2
+        },
+        "literacy": {
+          "value": 99.8
+        },
+        "hdi": {
+          "value": 0.881
+        },
+        "life_expectancy": {
+          "value": 76.5
+        }
+      }
+    },
+    {
+      "iso2": "PT",
+      "name": "Portugal",
+      "region": "Europe",
+      "metrics": {
+        "population": {
+          "value": 10400000
+        },
+        "area": {
+          "value": 92212
+        },
+        "gdp": {
+          "value": 287080000000
+        },
+        "gdp_per_capita": {
+          "value": 27600
+        },
+        "gni_per_capita_ppp": {
+          "value": 40920
+        },
+        "density": {
+          "value": 112.8
+        },
+        "literacy": {
+          "value": 96.1
+        },
+        "hdi": {
+          "value": 0.874
+        },
+        "life_expectancy": {
+          "value": 81
+        }
+      }
+    },
+    {
+      "iso2": "RO",
+      "name": "Romania",
+      "region": "Europe",
+      "metrics": {
+        "population": {
+          "value": 19000000
+        },
+        "area": {
+          "value": 238391
+        },
+        "gdp": {
+          "value": 348902000000
+        },
+        "gdp_per_capita": {
+          "value": 18367
+        },
+        "gni_per_capita_ppp": {
+          "value": 40320
+        },
+        "density": {
+          "value": 79.7
+        },
+        "literacy": {
+          "value": 99.1
+        },
+        "hdi": {
+          "value": 0.827
+        },
+        "life_expectancy": {
+          "value": 74.2
+        }
+      }
+    },
+    {
+      "iso2": "RU",
+      "name": "Russia",
+      "region": "Europe",
+      "metrics": {
+        "population": {
+          "value": 143400000
+        },
+        "area": {
+          "value": 17098242
+        },
+        "gdp": {
+          "value": 2240400000000
+        },
+        "gdp_per_capita": {
+          "value": 15624
+        },
+        "gni_per_capita_ppp": {
+          "value": 36010
+        },
+        "density": {
+          "value": 8.4
+        },
+        "literacy": {
+          "value": 99.7
+        },
+        "hdi": {
+          "value": 0.821
+        },
+        "life_expectancy": {
+          "value": 69.4
+        }
+      }
+    },
+    {
+      "iso2": "SA",
+      "name": "Saudi Arabia",
+      "region": "Asia",
+      "metrics": {
+        "population": {
+          "value": 36400000
+        },
+        "area": {
+          "value": 2149690
+        },
+        "gdp": {
+          "value": 1069437000000
+        },
+        "gdp_per_capita": {
+          "value": 29386
+        },
+        "gni_per_capita_ppp": {
+          "value": 56920
+        },
+        "density": {
+          "value": 16.9
+        },
+        "literacy": {
+          "value": 97.6
+        },
+        "hdi": {
+          "value": 0.875
+        },
+        "life_expectancy": {
+          "value": 76.9
+        }
+      }
+    },
+    {
+      "iso2": "SG",
+      "name": "Singapore",
+      "region": "Asia",
+      "metrics": {
+        "population": {
+          "value": 5920000
+        },
+        "area": {
+          "value": 733
+        },
+        "gdp": {
+          "value": 515548000000
+        },
+        "gdp_per_capita": {
+          "value": 87088
+        },
+        "gni_per_capita_ppp": {
+          "value": 116500
+        },
+        "density": {
+          "value": 8075
+        },
+        "literacy": {
+          "value": 97.5
+        },
+        "hdi": {
+          "value": 0.949
+        },
+        "life_expectancy": {
+          "value": 84.1
+        }
+      }
+    },
+    {
+      "iso2": "ZA",
+      "name": "South Africa",
+      "region": "Africa",
+      "metrics": {
+        "population": {
+          "value": 60400000
+        },
+        "area": {
+          "value": 1221037
+        },
+        "gdp": {
+          "value": 399015000000
+        },
+        "gdp_per_capita": {
+          "value": 6607
+        },
+        "gni_per_capita_ppp": {
+          "value": 16090
+        },
+        "density": {
+          "value": 49.5
+        },
+        "literacy": {
+          "value": 95
+        },
+        "hdi": {
+          "value": 0.713
+        },
+        "life_expectancy": {
+          "value": 62.3
+        }
+      }
+    },
+    {
+      "iso2": "KR",
+      "name": "South Korea",
+      "region": "Asia",
+      "metrics": {
+        "population": {
+          "value": 51780000
+        },
+        "area": {
+          "value": 100210
+        },
+        "gdp": {
+          "value": 1721909000000
+        },
+        "gdp_per_capita": {
+          "value": 33268
+        },
+        "gni_per_capita_ppp": {
+          "value": 52990
+        },
+        "density": {
+          "value": 517
+        },
+        "literacy": {
+          "value": 99
+        },
+        "hdi": {
+          "value": 0.929
+        },
+        "life_expectancy": {
+          "value": 83.7
+        }
+      }
+    },
+    {
+      "iso2": "ES",
+      "name": "Spain",
+      "region": "Europe",
+      "metrics": {
+        "population": {
+          "value": 47420000
+        },
+        "area": {
+          "value": 505990
+        },
+        "gdp": {
+          "value": 1580694000000
+        },
+        "gdp_per_capita": {
+          "value": 33331
+        },
+        "gni_per_capita_ppp": {
+          "value": 48540
+        },
+        "density": {
+          "value": 93.7
+        },
+        "literacy": {
+          "value": 98.6
+        },
+        "hdi": {
+          "value": 0.911
+        },
+        "life_expectancy": {
+          "value": 83.3
+        }
+      }
+    },
+    {
+      "iso2": "SE",
+      "name": "Sweden",
+      "region": "Europe",
+      "metrics": {
+        "population": {
+          "value": 10500000
+        },
+        "area": {
+          "value": 450295
+        },
+        "gdp": {
+          "value": 593268000000
+        },
+        "gdp_per_capita": {
+          "value": 56502
+        },
+        "gni_per_capita_ppp": {
+          "value": 62640
+        },
+        "density": {
+          "value": 23.3
+        },
+        "literacy": {
+          "value": 99
+        },
+        "hdi": {
+          "value": 0.952
+        },
+        "life_expectancy": {
+          "value": 83
+        }
+      }
+    },
+    {
+      "iso2": "CH",
+      "name": "Switzerland",
+      "region": "Europe",
+      "metrics": {
+        "population": {
+          "value": 8800000
+        },
+        "area": {
+          "value": 41291
+        },
+        "gdp": {
+          "value": 869601000000
+        },
+        "gdp_per_capita": {
+          "value": 98839
+        },
+        "gni_per_capita_ppp": {
+          "value": 82340
+        },
+        "density": {
+          "value": 213.1
+        },
+        "literacy": {
+          "value": 99
+        },
+        "hdi": {
+          "value": 0.967
+        },
+        "life_expectancy": {
+          "value": 84
+        }
+      }
+    },
+    {
+      "iso2": "TZ",
+      "name": "Tanzania",
+      "region": "Africa",
+      "metrics": {
+        "population": {
+          "value": 65500000
+        },
+        "area": {
+          "value": 947300
+        },
+        "gdp": {
+          "value": 79162000000
+        },
+        "gdp_per_capita": {
+          "value": 1209
+        },
+        "gni_per_capita_ppp": {
+          "value": 2980
+        },
+        "density": {
+          "value": 69.2
+        },
+        "literacy": {
+          "value": 78.1
+        },
+        "hdi": {
+          "value": 0.532
+        },
+        "life_expectancy": {
+          "value": 66.2
+        }
+      }
+    },
+    {
+      "iso2": "TH",
+      "name": "Thailand",
+      "region": "Asia",
+      "metrics": {
+        "population": {
+          "value": 71800000
+        },
+        "area": {
+          "value": 513120
+        },
+        "gdp": {
+          "value": 514945000000
+        },
+        "gdp_per_capita": {
+          "value": 7172
+        },
+        "gni_per_capita_ppp": {
+          "value": 21220
+        },
+        "density": {
+          "value": 140
+        },
+        "literacy": {
+          "value": 94.1
+        },
+        "hdi": {
+          "value": 0.803
+        },
+        "life_expectancy": {
+          "value": 79.3
+        }
+      }
+    },
+    {
+      "iso2": "TN",
+      "name": "Tunisia",
+      "region": "Africa",
+      "metrics": {
+        "population": {
+          "value": 12400000
+        },
+        "area": {
+          "value": 163610
+        },
+        "gdp": {
+          "value": 46840000000
+        },
+        "gdp_per_capita": {
+          "value": 3778
+        },
+        "gni_per_capita_ppp": {
+          "value": 13130
+        },
+        "density": {
+          "value": 75.8
+        },
+        "literacy": {
+          "value": 79.7
+        },
+        "hdi": {
+          "value": 0.732
+        },
+        "life_expectancy": {
+          "value": 73.8
+        }
+      }
+    },
+    {
+      "iso2": "TR",
+      "name": "Turkey",
+      "region": "Asia",
+      "metrics": {
+        "population": {
+          "value": 85800000
+        },
+        "area": {
+          "value": 783562
+        },
+        "gdp": {
+          "value": 1029303000000
+        },
+        "gdp_per_capita": {
+          "value": 12001
+        },
+        "gni_per_capita_ppp": {
+          "value": 38170
+        },
+        "density": {
+          "value": 109.4
+        },
+        "literacy": {
+          "value": 96.7
+        },
+        "hdi": {
+          "value": 0.838
+        },
+        "life_expectancy": {
+          "value": 76
+        }
+      }
+    },
+    {
+      "iso2": "AE",
+      "name": "UAE",
+      "region": "Asia",
+      "metrics": {
+        "population": {
+          "value": 9440000
+        },
+        "area": {
+          "value": 83600
+        },
+        "gdp": {
+          "value": 507532000000
+        },
+        "gdp_per_capita": {
+          "value": 53757
+        },
+        "gni_per_capita_ppp": {
+          "value": 96850
+        },
+        "density": {
+          "value": 112.9
+        },
+        "literacy": {
+          "value": 98
+        },
+        "hdi": {
+          "value": 0.937
+        },
+        "life_expectancy": {
+          "value": 78.7
+        }
+      }
+    },
+    {
+      "iso2": "US",
+      "name": "USA",
+      "region": "N. America",
+      "metrics": {
+        "population": {
+          "value": 335000000
+        },
+        "area": {
+          "value": 9833517
+        },
+        "gdp": {
+          "value": 27360935000000
+        },
+        "gdp_per_capita": {
+          "value": 81695
+        },
+        "gni_per_capita_ppp": {
+          "value": 80300
+        },
+        "density": {
+          "value": 34.1
+        },
+        "literacy": {
+          "value": 99
+        },
+        "hdi": {
+          "value": 0.927
+        },
+        "life_expectancy": {
+          "value": 77.5
+        }
+      }
+    },
+    {
+      "iso2": "UG",
+      "name": "Uganda",
+      "region": "Africa",
+      "metrics": {
+        "population": {
+          "value": 48600000
+        },
+        "area": {
+          "value": 241038
+        },
+        "gdp": {
+          "value": 45561000000
+        },
+        "gdp_per_capita": {
+          "value": 937
+        },
+        "gni_per_capita_ppp": {
+          "value": 2660
+        },
+        "density": {
+          "value": 201.6
+        },
+        "literacy": {
+          "value": 79
+        },
+        "hdi": {
+          "value": 0.525
+        },
+        "life_expectancy": {
+          "value": 62.7
+        }
+      }
+    },
+    {
+      "iso2": "UA",
+      "name": "Ukraine",
+      "region": "Europe",
+      "metrics": {
+        "population": {
+          "value": 37000000
+        },
+        "area": {
+          "value": 603550
+        },
+        "gdp": {
+          "value": 160500000000
+        },
+        "gdp_per_capita": {
+          "value": 4339
+        },
+        "gni_per_capita_ppp": {
+          "value": 14720
+        },
+        "density": {
+          "value": 61.3
+        },
+        "literacy": {
+          "value": 99.8
+        },
+        "hdi": {
+          "value": 0.773
+        },
+        "life_expectancy": {
+          "value": 69
+        }
+      }
+    },
+    {
+      "iso2": "GB",
+      "name": "United Kingdom",
+      "region": "Europe",
+      "metrics": {
+        "population": {
+          "value": 67500000
+        },
+        "area": {
+          "value": 242495
+        },
+        "gdp": {
+          "value": 3332059000000
+        },
+        "gdp_per_capita": {
+          "value": 49384
+        },
+        "gni_per_capita_ppp": {
+          "value": 54600
+        },
+        "density": {
+          "value": 278.4
+        },
+        "literacy": {
+          "value": 99
+        },
+        "hdi": {
+          "value": 0.94
+        },
+        "life_expectancy": {
+          "value": 80.7
+        }
+      }
+    },
+    {
+      "iso2": "UY",
+      "name": "Uruguay",
+      "region": "S. America",
+      "metrics": {
+        "population": {
+          "value": 3400000
+        },
+        "area": {
+          "value": 176215
+        },
+        "gdp": {
+          "value": 77241000000
+        },
+        "gdp_per_capita": {
+          "value": 22718
+        },
+        "gni_per_capita_ppp": {
+          "value": 28200
+        },
+        "density": {
+          "value": 19.3
+        },
+        "literacy": {
+          "value": 98.8
+        },
+        "hdi": {
+          "value": 0.83
+        },
+        "life_expectancy": {
+          "value": 77.7
+        }
+      }
+    },
+    {
+      "iso2": "VE",
+      "name": "Venezuela",
+      "region": "S. America",
+      "metrics": {
+        "population": {
+          "value": 28400000
+        },
+        "area": {
+          "value": 916445
+        },
+        "gdp": {
+          "value": 92200000000
+        },
+        "gdp_per_capita": {
+          "value": 3246
+        },
+        "density": {
+          "value": 31
+        },
+        "literacy": {
+          "value": 97.1
+        },
+        "hdi": {
+          "value": 0.691
+        },
+        "life_expectancy": {
+          "value": 72.1
+        }
+      }
+    },
+    {
+      "iso2": "VN",
+      "name": "Vietnam",
+      "region": "Asia",
+      "metrics": {
+        "population": {
+          "value": 99500000
+        },
+        "area": {
+          "value": 331212
+        },
+        "gdp": {
+          "value": 449900000000
+        },
+        "gdp_per_capita": {
+          "value": 4522
+        },
+        "gni_per_capita_ppp": {
+          "value": 13860
+        },
+        "density": {
+          "value": 300.4
+        },
+        "literacy": {
+          "value": 95.8
+        },
+        "hdi": {
+          "value": 0.726
+        },
+        "life_expectancy": {
+          "value": 73.6
+        }
+      }
+    }
+  ]
+}

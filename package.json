@@ -1,18 +1,23 @@
 {
   "name": "countryquiz",
   "private": true,
-  "version": "0.0.0",
+  "version": "1.0.0",
   "type": "module",
+  "license": "AGPL-3.0-only",
+  "engines": {
+    "node": ">=22.18.0"
+  },
   "scripts": {
     "dev": "vite",
-    "build": "tsc && vite build",
-    "preview": "vite preview"
+    "typecheck": "tsc -p tsconfig.json && tsc -p tsconfig.node.json",
+    "test": "node --test \"tests/**/*.test.ts\"",
+    "build": "tsc -p tsconfig.json && tsc -p tsconfig.node.json && vite build",
+    "preview": "vite preview",
+    "update-data": "node scripts/update-data.ts"
   },
   "devDependencies": {
-    "typescript": "~5.9.3",
-    "vite": "npm:rolldown-vite@7.2.5"
-  },
-  "resolutions": {
-    "vite": "npm:rolldown-vite@7.2.5"
+    "@types/node": "^24.19.4",
+    "typescript": "^7.0.2",
+    "vite": "^8.4.0"
   }
 }
