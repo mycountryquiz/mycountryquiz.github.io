@@ -16,7 +16,7 @@
     "update-data": "node scripts/update-data.ts"
   },
   "devDependencies": {
-    "@types/node": "^24.19.4",
+    "@types/node": "^26.6.6",
     "typescript": "^7.0.2",
     "vite": "^8.4.0"
   }
